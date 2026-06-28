@@ -11,7 +11,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PangyaAPI\PangyaAPI.PAK\PangyaAPI.PAK.csproj" />
+    <ProjectReference Include="..\PangyaAPI\PangyaAPI.UpdateList\PangyaAPI.UpdateList.csproj" />
     <ProjectReference Include="..\PangyaAPI\PangyaAPI.Utilities\PangyaAPI.Utilities.csproj" />
    </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="IFFEditor\" />
+  </ItemGroup>
 
 </Project>

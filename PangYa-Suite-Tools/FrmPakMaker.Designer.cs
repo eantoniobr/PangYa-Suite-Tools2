@@ -12,11 +12,17 @@
         // Componentes da Aba 1 (Extração e Modificações)
         private System.Windows.Forms.TextBox txtPakPath;
         private System.Windows.Forms.Button btnBrowsePak;
+        private System.Windows.Forms.Label lblSearch;
+        private System.Windows.Forms.TextBox txtSearch;
+        private System.Windows.Forms.Label lblCurrentPath;
+        private System.Windows.Forms.TreeView tvFolders;
         private System.Windows.Forms.ListView lstEntries;
         private System.Windows.Forms.ColumnHeader colName;
         private System.Windows.Forms.ColumnHeader colType;
         private System.Windows.Forms.ColumnHeader colSize;
         private System.Windows.Forms.ColumnHeader colCompSize;
+        private System.Windows.Forms.Button btnExtractSelected;
+        private System.Windows.Forms.Button btnRemoveSelected;
         private System.Windows.Forms.Button btnExtractAll;
         private System.Windows.Forms.Button btnUpdatePak;
         private System.Windows.Forms.Button btnBatchExtract;
@@ -60,6 +66,12 @@
             lblAuthor = new Label();
             lblVersion = new Label();
             lblEntries = new Label();
+            lblSearch = new Label();
+            txtSearch = new TextBox();
+            lblCurrentPath = new Label();
+            tvFolders = new TreeView();
+            btnExtractSelected = new Button();
+            btnRemoveSelected = new Button();
             btnBatchExtract = new Button();
             btnUpdatePak = new Button();
             btnExtractAll = new Button();
@@ -108,6 +120,12 @@
             // tabExtract
             // 
             tabExtract.Controls.Add(groupHeader);
+            tabExtract.Controls.Add(lblSearch);
+            tabExtract.Controls.Add(txtSearch);
+            tabExtract.Controls.Add(lblCurrentPath);
+            tabExtract.Controls.Add(tvFolders);
+            tabExtract.Controls.Add(btnExtractSelected);
+            tabExtract.Controls.Add(btnRemoveSelected);
             tabExtract.Controls.Add(btnBatchExtract);
             tabExtract.Controls.Add(btnUpdatePak);
             tabExtract.Controls.Add(btnExtractAll);
@@ -161,6 +179,67 @@
             lblEntries.TabIndex = 2;
             lblEntries.Text = "Entradas: ---";
             // 
+            // lblSearch
+            // 
+            lblSearch.Location = new Point(11, 91);
+            lblSearch.Name = "lblSearch";
+            lblSearch.Size = new Size(95, 17);
+            lblSearch.TabIndex = 3;
+            lblSearch.Text = "🔎 Pesquisar:";
+            // 
+            // txtSearch
+            // 
+            txtSearch.Location = new Point(108, 88);
+            txtSearch.Margin = new Padding(3, 2, 3, 2);
+            txtSearch.Name = "txtSearch";
+            txtSearch.PlaceholderText = "Filtrar por nome do objeto/arquivo...";
+            txtSearch.Size = new Size(225, 23);
+            txtSearch.TabIndex = 4;
+            // 
+            // lblCurrentPath
+            // 
+            lblCurrentPath.Location = new Point(345, 91);
+            lblCurrentPath.Name = "lblCurrentPath";
+            lblCurrentPath.Size = new Size(390, 17);
+            lblCurrentPath.TabIndex = 5;
+            lblCurrentPath.Text = "📂 Caminho: (todos os arquivos)";
+            // 
+            // tvFolders
+            // 
+            tvFolders.Location = new Point(11, 114);
+            tvFolders.Margin = new Padding(3, 2, 3, 2);
+            tvFolders.Name = "tvFolders";
+            tvFolders.Size = new Size(200, 180);
+            tvFolders.TabIndex = 6;
+            // 
+            // btnExtractSelected
+            // 
+            btnExtractSelected.BackColor = Color.FromArgb(23, 162, 184);
+            btnExtractSelected.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnExtractSelected.ForeColor = Color.White;
+            btnExtractSelected.Location = new Point(11, 300);
+            btnExtractSelected.Margin = new Padding(3, 2, 3, 2);
+            btnExtractSelected.Name = "btnExtractSelected";
+            btnExtractSelected.Size = new Size(175, 26);
+            btnExtractSelected.TabIndex = 7;
+            btnExtractSelected.Text = "📤 EXTRAIR SELECIONADO(S)";
+            btnExtractSelected.UseVisualStyleBackColor = false;
+            btnExtractSelected.Click += btnExtractSelected_Click;
+            // 
+            // btnRemoveSelected
+            // 
+            btnRemoveSelected.BackColor = Color.FromArgb(220, 53, 69);
+            btnRemoveSelected.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnRemoveSelected.ForeColor = Color.White;
+            btnRemoveSelected.Location = new Point(192, 300);
+            btnRemoveSelected.Margin = new Padding(3, 2, 3, 2);
+            btnRemoveSelected.Name = "btnRemoveSelected";
+            btnRemoveSelected.Size = new Size(175, 26);
+            btnRemoveSelected.TabIndex = 8;
+            btnRemoveSelected.Text = "🗑️ REMOVER SELECIONADO(S)";
+            btnRemoveSelected.UseVisualStyleBackColor = false;
+            btnRemoveSelected.Click += btnRemoveSelected_Click;
+            // 
             // btnBatchExtract
             // 
             btnBatchExtract.BackColor = Color.FromArgb(108, 117, 125);
@@ -170,7 +249,7 @@
             btnBatchExtract.Margin = new Padding(3, 2, 3, 2);
             btnBatchExtract.Name = "btnBatchExtract";
             btnBatchExtract.Size = new Size(175, 28);
-            btnBatchExtract.TabIndex = 4;
+            btnBatchExtract.TabIndex = 9;
             btnBatchExtract.Text = "📂 EXTRAIR PASTA (LOTE)";
             btnBatchExtract.UseVisualStyleBackColor = false;
             btnBatchExtract.Click += btnBatchExtract_Click;
@@ -184,7 +263,7 @@
             btnUpdatePak.Margin = new Padding(3, 2, 3, 2);
             btnUpdatePak.Name = "btnUpdatePak";
             btnUpdatePak.Size = new Size(160, 28);
-            btnUpdatePak.TabIndex = 5;
+            btnUpdatePak.TabIndex = 10;
             btnUpdatePak.Text = "🔄 INJETAR / ATUALIZAR";
             btnUpdatePak.UseVisualStyleBackColor = false;
             btnUpdatePak.Click += btnUpdatePak_Click;
@@ -198,8 +277,8 @@
             btnExtractAll.Margin = new Padding(3, 2, 3, 2);
             btnExtractAll.Name = "btnExtractAll";
             btnExtractAll.Size = new Size(149, 28);
-            btnExtractAll.TabIndex = 6;
-            btnExtractAll.Text = "💥 EXTRAIR ATUAL";
+            btnExtractAll.TabIndex = 11;
+            btnExtractAll.Text = "💥 EXTRAIR TUDO";
             btnExtractAll.UseVisualStyleBackColor = false;
             btnExtractAll.Click += btnExtractAll_Click;
             // 
@@ -208,33 +287,33 @@
             lstEntries.Columns.AddRange(new ColumnHeader[] { colName, colType, colSize, colCompSize });
             lstEntries.FullRowSelect = true;
             lstEntries.GridLines = true;
-            lstEntries.Location = new Point(11, 92);
+            lstEntries.Location = new Point(217, 114);
             lstEntries.Margin = new Padding(3, 2, 3, 2);
             lstEntries.Name = "lstEntries";
-            lstEntries.Size = new Size(724, 234);
-            lstEntries.TabIndex = 3;
+            lstEntries.Size = new Size(518, 180);
+            lstEntries.TabIndex = 12;
             lstEntries.UseCompatibleStateImageBehavior = false;
             lstEntries.View = View.Details;
             // 
             // colName
             // 
             colName.Text = "Nome do Arquivo";
-            colName.Width = 320;
+            colName.Width = 220;
             // 
             // colType
             // 
             colType.Text = "Tipo";
-            colType.Width = 90;
+            colType.Width = 70;
             // 
             // colSize
             // 
             colSize.Text = "Tamanho Real";
-            colSize.Width = 140;
+            colSize.Width = 110;
             // 
             // colCompSize
             // 
             colCompSize.Text = "Tam. Compactado";
-            colCompSize.Width = 140;
+            colCompSize.Width = 100;
             // 
             // btnBrowsePak
             // 
@@ -417,7 +496,7 @@
             MaximizeBox = false;
             Name = "FrmPakMaker";
             Padding = new Padding(9, 8, 9, 26);
-            Text = "PakTool - Interface Gráfica (Pangya)";
+            Text = "PakManager - Interface";
             tabControl1.ResumeLayout(false);
             tabExtract.ResumeLayout(false);
             tabExtract.PerformLayout();

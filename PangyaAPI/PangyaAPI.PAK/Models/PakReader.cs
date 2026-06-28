@@ -1,6 +1,7 @@
 ﻿//criado por LUISMK -> github.com/luismk
 using PangyaAPI.PAK.Flags;
 using PangyaAPI.Utilities.Cryptography; 
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -9,6 +10,7 @@ namespace PangyaAPI.PAK.Models
     public class PakReader : IDisposable
     {
         private readonly BinaryReader _reader;
+        private readonly object _ioLock = new();
         private bool _disposed;
         public uint xorKey = 0x71;
         public PakHeader Header { get; private set; } = new();
@@ -146,19 +148,28 @@ namespace PangyaAPI.PAK.Models
 
         // ── Extração ─────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Extrai todas as entradas cujo nome combine com <paramref name="pattern"/> (suporta '*').
+        /// </summary>
+        /// <param name="onProgress">Callback opcional invocado como (arquivosProcessados, totalDeArquivos).</param>
         public void Extract(string pattern, string outputDir = "./",
-                            Action<string>? log = null)
+                            Action<string>? log = null,
+                            Action<int, int>? onProgress = null)
         {
             // Converte wildcard '*' para regex '.*'
             var regexPattern = "^" + Regex.Escape(pattern).Replace(@"\*", ".*") + "$";
             var regex = new Regex(regexPattern, RegexOptions.IgnoreCase);
 
-            foreach (var entry in Entries)
+            var matches = Entries
+                .Where(e => e.Type != PakFileEntryType.Directory && regex.IsMatch(e.Name))
+                .ToList();
+
+            int total = matches.Count;
+            int done = 0;
+
+            foreach (var entry in matches)
             {
                 string name = entry.Name;
-                if (!regex.IsMatch(name)) continue;
-                if (entry.Type == PakFileEntryType.Directory) continue;
-
                 log?.Invoke($"Encontrado: {name}");
 
                 string outDir = outputDir.TrimEnd('/', '\\') + "/";
@@ -170,41 +181,85 @@ namespace PangyaAPI.PAK.Models
 
                 string outPath = Path.Combine(outDir, Path.GetFileName(name));
 
-                _reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
-
-                byte[]? data = null; 
-                if (entry.Type == PakFileEntryType.Raw)
-                {
-                    data = _reader.ReadBytes((int)entry.Size);
-                }
-                else if (entry.Type == PakFileEntryType.LZ77)
-                {
-                    byte[] compressed = _reader.ReadBytes((int)entry.CompressSize);
-                    data = Lz77.Decompress(compressed, entry.Size, entry.CompressSize);
-                }
-                else if (entry.Type == PakFileEntryType.LZ772)
-                {
-                    byte[] compressed = _reader.ReadBytes((int)entry.CompressSize);
-                    data = Lz772.Decompress(compressed, entry.Size, entry.CompressSize);
-                }
+                byte[]? data = ExtractEntryToBytes(entry);
 
                 if (data == null)
                 {
-                    if(entry.Size == 0)
+                    if (entry.Size == 0)
                     {
-                        data = new byte[entry.Size];
-                        log?.Invoke($"[Warning] Arquivo Vazio: {name}"); 
+                        data = Array.Empty<byte>();
+                        log?.Invoke($"[Warning] Arquivo Vazio: {name}");
                     }
                     else
                     {
                         log?.Invoke($"[Erro] Falha ao extrair: {name}");
+                        done++;
+                        onProgress?.Invoke(done, total);
                         continue;
                     }
                 }
 
                 File.WriteAllBytes(outPath, data);
                 log?.Invoke($"Extraído: {name} → {outPath.Replace("\\", "/")}");
+
+                done++;
+                onProgress?.Invoke(done, total);
             }
+        }
+
+        /// <summary>
+        /// Lê e descomprime os bytes de uma única entry, reaproveitando o stream já
+        /// aberto deste PakReader (thread-safe via lock interno). Não toca em disco.
+        /// </summary>
+        public byte[]? ExtractEntryToBytes(PakFileEntry entry)
+        {
+            lock (_ioLock)
+            {
+                _reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
+
+                if (entry.Type == PakFileEntryType.Raw)
+                    return _reader.ReadBytes((int)entry.Size);
+
+                if (entry.Type == PakFileEntryType.LZ77)
+                {
+                    byte[] compressed = _reader.ReadBytes((int)entry.CompressSize);
+                    return Lz77.Decompress(compressed, entry.Size, entry.CompressSize);
+                }
+
+                if (entry.Type == PakFileEntryType.LZ772)
+                {
+                    byte[] compressed = _reader.ReadBytes((int)entry.CompressSize);
+                    return Lz772.Decompress(compressed, entry.Size, entry.CompressSize);
+                }
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extrai UMA única entry (já conhecida via <see cref="Entries"/>) direto para
+        /// <paramref name="outputPath"/>, sem precisar reabrir/reparsear o arquivo .pak.
+        /// Use esse método em vez de instanciar um novo PakReader só para um item —
+        /// é a forma rápida de implementar "extrair item selecionado" na GUI.
+        /// </summary>
+        public void ExtractEntry(PakFileEntry entry, string outputPath)
+        {
+            if (entry.Type == PakFileEntryType.Directory)
+                throw new InvalidOperationException("Não é possível extrair uma entrada de diretório como arquivo.");
+
+            byte[]? data = ExtractEntryToBytes(entry);
+
+            if (data == null && entry.Size == 0)
+                data = Array.Empty<byte>();
+
+            if (data == null)
+                throw new InvalidDataException($"Falha ao extrair/descomprimir: {entry.Name}");
+
+            string? dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllBytes(outputPath, data);
         }
 
         // ── Auto-detecção de chave ───────────────────────────────────────────
@@ -260,7 +315,10 @@ namespace PangyaAPI.PAK.Models
 
         public void Dispose()
         {
-            if (!_disposed) { _reader.Dispose(); _disposed = true; }
+            lock (_ioLock)
+            {
+                if (!_disposed) { _reader.Dispose(); _disposed = true; }
+            }
         }
     }
 

@@ -33,6 +33,29 @@ namespace PangyaAPI.PAK.Models
             CreateFromEntries(entries, baseDir, outputPath, log);
         }
 
+        /// <summary>
+        /// Igual a <see cref="CreateFromDirectory"/>, mas empacota apenas o CONTEÚDO de
+        /// <paramref name="sourceDir"/>: o nome da própria pasta NÃO entra nos caminhos
+        /// internos. Use isso ao reconstruir um PAK a partir de uma pasta temporária
+        /// (ex.: nomes como "PakTemp_xxxxx") — caso contrário esse nome aleatório acaba
+        /// virando o primeiro segmento de todo caminho interno do PAK.
+        /// </summary>
+        public void CreateFromDirectoryContents(string sourceDir, string outputPath,
+                                                 Action<string>? log = null)
+        {
+            string dir = sourceDir.TrimEnd('/', '\\');
+
+            var entries = new List<(bool isDir, string path)>();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories))
+                entries.Add((Directory.Exists(entry), entry));
+
+            string baseDir = dir;
+            if (!baseDir.EndsWith('/') && !baseDir.EndsWith('\\'))
+                baseDir += "/";
+
+            CreateFromEntries(entries, baseDir, outputPath, log);
+        }
+
         public void CreateFromFile(string filePath, string outputPath,
                                    Action<string>? log = null)
         {
