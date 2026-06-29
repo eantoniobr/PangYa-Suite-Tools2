@@ -16,7 +16,7 @@ namespace PangYa_Suite_Tools
         private readonly Dictionary<string, TreeNode> _folderNodes = new(StringComparer.OrdinalIgnoreCase);
 
         // Conjunto de entries atualmente "no escopo" (pasta selecionada na árvore), antes do filtro de pesquisa
-        private List<PakFileEntry> _scopedEntries = new();
+        private List<PakFileEntry> _scopedEntries = [];
         private bool isInitializingLanguages = true;
         public FrmPakMaker()
         {
@@ -188,28 +188,101 @@ namespace PangYa_Suite_Tools
             txtPakPath.BackColor = SystemColors.Control;
         }
 
-        private void FrmPakMaker_DragDrop(object? sender, DragEventArgs e)
+        private async void FrmPakMaker_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data == null) return;
 
-            string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files.Length > 0)
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
-                string path = files[0];
                 txtPakPath.BackColor = SystemColors.Control;
+                int currentTab = tabControl1.SelectedIndex;
 
-                // Se for um arquivo .pak, carrega no leitor
-                if (File.Exists(path) && path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase))
+                if (currentTab == 0)
                 {
-                    txtPakPath.Text = path;
-                    tabControl1.SelectedIndex = 0; // Foca na aba de extração
-                    LoadPak(path);
+                    if (_currentReader == null || string.IsNullOrEmpty(txtPakPath.Text) || !File.Exists(txtPakPath.Text))
+                    {
+                        string firstPath = files[0];
+                        if (File.Exists(firstPath) && firstPath.EndsWith(".pak", StringComparison.OrdinalIgnoreCase))
+                        {
+                            txtPakPath.Text = firstPath;
+                            LoadPak(firstPath);
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                GetText("Please drag a valid .pak file extension to open.", "Por favor, arraste um arquivo válido de extensão .pak para abrir."),
+                                GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                    }
+                    else
+                    {
+                        var itemsToInject = new List<PakInjectItem>();
+
+                        foreach (string path in files)
+                        {
+                            if (File.Exists(path))
+                            {
+                                itemsToInject.Add(new PakInjectItem(path, null));
+                            }
+                            else if (Directory.Exists(path))
+                            {
+                                string virtualTargetFolder = "";
+                                if (tvFolders.SelectedNode != null)
+                                {
+                                    string rawTreePath = tvFolders.SelectedNode.FullPath;
+                                    virtualTargetFolder = rawTreePath
+                                        .Replace("🗂 ", "").Replace("🗂", "")
+                                        .Replace("📁 ", "").Replace("📁", "")
+                                        .Replace('\\', '/');
+
+                                    if (virtualTargetFolder.StartsWith("Todos os Arquivos/", StringComparison.OrdinalIgnoreCase))
+                                        virtualTargetFolder = virtualTargetFolder.Substring("Todos os Arquivos/".Length);
+                                    else if (virtualTargetFolder.Equals("Todos os Arquivos", StringComparison.OrdinalIgnoreCase))
+                                        virtualTargetFolder = "";
+
+                                    virtualTargetFolder = virtualTargetFolder.Trim('/');
+                                    if (!string.IsNullOrEmpty(virtualTargetFolder))
+                                        virtualTargetFolder += "/";
+                                }
+
+                                string[] allFiles = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                                foreach (string file in allFiles)
+                                {
+                                    string fileRelativeName = Path.GetFileName(path) + "/" +
+                                                              Path.GetRelativePath(path, file).Replace('\\', '/');
+
+                                    fileRelativeName = fileRelativeName.Trim('/');
+                                    string finalVirtualPath = virtualTargetFolder + fileRelativeName;
+
+                                    itemsToInject.Add(new PakInjectItem(file, finalVirtualPath));
+                                }
+                            }
+                        }
+
+                        if (itemsToInject.Count == 0)
+                        {
+                            MessageBox.Show(
+                                GetText("No valid files or folders were found for injection.", "Nenhum arquivo ou pasta válida foi encontrado para injeção."),
+                                GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+
+                        await InjectFilesIntoCurrentPakAsync(itemsToInject);
+                    }
                 }
-                // Se for uma pasta, joga para a aba de criação
-                else if (Directory.Exists(path))
+                else if (currentTab == 1)
                 {
-                    txtSourceFolder.Text = path;
-                    tabControl1.SelectedIndex = 1; // Foca na aba de criação
+                    string path = files[0];
+                    if (Directory.Exists(path))
+                    {
+                        txtSourceFolder.Text = path;
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            GetText("Please drag a valid folder to compile a new PAK.", "Por favor, arraste uma pasta válida para compilar um novo PAK."),
+                            GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                 }
             }
         }
@@ -278,7 +351,7 @@ namespace PangYa_Suite_Tools
             }
 
             tvFolders.EndUpdate();
-            tvFolders.SelectedNode = rootNode; // Dispara TvFolders_AfterSelect → popula a lista com tudo
+            tvFolders.SelectedNode = rootNode;
         }
 
         /// <summary>
@@ -310,7 +383,7 @@ namespace PangYa_Suite_Tools
             string folderTag = e.Node?.Tag as string ?? RootFolderTag;
 
             _scopedEntries = string.IsNullOrEmpty(folderTag)
-                ? _currentReader.Entries.Where(en => en.Type != PakFileEntryType.Directory).ToList()
+                ? [.. _currentReader.Entries.Where(en => en.Type != PakFileEntryType.Directory)]
                 : _currentReader.Entries
                     .Where(en => string.Equals(
                         Path.GetDirectoryName(en.Name.Replace('/', '\\')) ?? "",
@@ -337,24 +410,62 @@ namespace PangYa_Suite_Tools
             PopulateList(filtered);
         }
 
+        private List<PakFileEntry> GetEntriesForFolder(string folderPath)
+        {
+            if (_currentReader == null) return new List<PakFileEntry>();
+
+            // Padroniza as barras para a filtragem interna
+            string cleanPath = folderPath.Replace('\\', '/').Trim('/');
+
+            // Se estiver na raiz ("Todos os Arquivos" ou string vazia), retorna TUDO do PAK
+            if (string.IsNullOrWhiteSpace(cleanPath) || cleanPath.Equals("Todos os Arquivos", StringComparison.OrdinalIgnoreCase))
+            {
+                return _currentReader.Entries
+                    .Where(en => en.Type != PakFileEntryType.Directory)
+                    .ToList();
+            }
+
+            // Se for uma pasta específica, garante o caractere '/' no final (Ex: "data/round20_abbot/")
+            string prefix = cleanPath + "/";
+
+            // Retorna apenas as entradas que começam com o caminho daquela pasta
+            return [.. _currentReader.Entries
+                .Where(en => en.Type != PakFileEntryType.Directory &&
+                             en.Name.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase))];
+        }
+
         /// <summary>Preenche a ListView com o conjunto de entries fornecido (sem tocar no escopo/pesquisa).</summary>
         private void PopulateList(IEnumerable<PakFileEntry> entries)
         {
             lstEntries.BeginUpdate();
             lstEntries.Items.Clear();
-
             foreach (var entry in entries)
             {
-                var item = new ListViewItem(entry.Name);
+                // CORREÇÃO: Padroniza as barras e extrai apenas o nome do arquivo puro
+                string cleanName = entry.Name.Replace('/', '\\');
+                string displayName = Path.GetFileName(cleanName);
+
+                // Caso seja uma pasta pura (se o seu PAK listar diretórios como entradas vazias)
+                if (string.IsNullOrEmpty(displayName) && entry.Type == PakFileEntryType.Directory)
+                {
+                    displayName = Path.GetFileName(cleanName.TrimEnd('\\'));
+                }
+
+                var item = new ListViewItem(displayName); // Exibe apenas "data.iff"
                 item.SubItems.Add(entry.Type.ToString());
                 item.SubItems.Add($"0x{entry.Size:X8}");
                 item.SubItems.Add($"0x{entry.CompressSize:X8}");
 
-                item.Tag = entry;
-
+                item.Tag = entry; // O Tag continua guardando o objeto completo intacto (com o Name original do PAK)
                 if (entry.Type == PakFileEntryType.Directory)
-                    item.ForeColor = Color.DarkCyan;
-
+                    item.ForeColor = Color.DarkCyan; // Pastas mantêm o tom ciano escuro
+                else if (entry.Type == PakFileEntryType.LZ77)
+                    item.ForeColor = Color.ForestGreen; // Arquivos compactados em LZ77 (Verde)
+                else if (entry.Type == PakFileEntryType.Raw)
+                    item.ForeColor = Color.DimGray; // Arquivos sem compressão / Brutos (Cinza discreto)
+                else if (entry.Type == PakFileEntryType.LZ772)
+                    item.ForeColor = Color.ForestGreen;  // Arquivos compactados do jogo em Verde
+                   
                 lstEntries.Items.Add(item);
             }
 
@@ -448,6 +559,158 @@ namespace PangYa_Suite_Tools
         /// </summary>
         private async Task ExtractSelectedAsync()
         {
+            if (_currentReader == null) return;
+
+            // Se houver itens na lista da direita, prioriza a extração de arquivos individuais
+            if (lstEntries.SelectedItems.Count > 0)
+            {
+                await ExtractOnlySelectedFilesAsync();
+            }
+            // Se não houver nada na lista, mas houver uma pasta na árvore, extrai a pasta
+            else if (tvFolders.SelectedNode != null)
+            {
+                await ExtractSelectedFolderAsync();
+            }
+            else
+            {
+                MessageBox.Show("Selecione arquivos na lista ou uma pasta na árvore lateral para extrair.",
+                    "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Opção 1: Extrai estritamente a pasta selecionada na TreeView (e suas subpastas)
+        /// </summary>
+        private async Task ExtractSelectedFolderAsync()
+        {
+            if (_currentReader == null || tvFolders.SelectedNode == null) return;
+
+            string rawPath = tvFolders.SelectedNode.FullPath;
+
+            // Limpa os emojis e espaços extras
+            string cleanPath = rawPath
+                .Replace("🗂 ", "").Replace("🗂", "")
+                .Replace("📁 ", "").Replace("📁", "")
+                .Replace('\\', '/');
+
+            if (cleanPath.StartsWith("Todos os Arquivos/", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanPath = cleanPath.Substring("Todos os Arquivos/".Length);
+            }
+            else if (cleanPath.Equals("Todos os Arquivos", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanPath = "";
+            }
+
+            List<PakFileEntry> entriesToExtract;
+            string dialogTitle;
+            string rootToStrip = ""; // Guardará o que precisamos remover do caminho do arquivo
+
+            if (string.IsNullOrWhiteSpace(cleanPath))
+            {
+                entriesToExtract = _currentReader.Entries
+                    .Where(en => en.Type != PakFileEntryType.Directory)
+                    .ToList();
+                dialogTitle = "Todo o PAK";
+            }
+            else
+            {
+                string prefix = cleanPath.Trim('/') + "/";
+
+                // Guardamos o caminho da pasta pai para remover da estrutura final
+                // Se selecionou 'data/round20_abbot/ase', queremos manter apenas o que está de 'ase' para frente
+                int lastSlash = cleanPath.LastIndexOf('/');
+                if (lastSlash >= 0)
+                {
+                    rootToStrip = cleanPath.Substring(0, lastSlash + 1); // Ex: "data/round20_abbot/"
+                }
+
+                entriesToExtract = _currentReader.Entries
+                    .Where(en => en.Type != PakFileEntryType.Directory &&
+                                 en.Name.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                dialogTitle = $"Pasta: {tvFolders.SelectedNode.Text.Replace("📁 ", "")}";
+            }
+
+            if (entriesToExtract.Count == 0)
+            {
+                MessageBox.Show($"Nenhum arquivo encontrado para o caminho: {cleanPath}", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var folderDialog = new FolderBrowserDialog
+            {
+                Description = $"Selecione o destino para extrair a {dialogTitle}"
+            };
+            if (folderDialog.ShowDialog() != DialogResult.OK) return;
+
+            // Passamos o 'rootToStrip' para o método que grava os arquivos
+            await RunExtractionWithStripAsync(entriesToExtract, folderDialog.SelectedPath, rootToStrip);
+        }
+
+        private async Task RunExtractionWithStripAsync(List<PakFileEntry> entries, string destinationDir, string rootToStrip)
+        {
+            btnExtractSelected.Enabled = false;
+            lblStatus.Text = "Extraindo selecionado(s)...";
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    int total = entries.Count;
+                    int done = 0;
+
+                    foreach (var entry in entries)
+                    {
+                        // Padroniza o nome do arquivo interno
+                        string relativePath = entry.Name.Replace('\\', '/');
+
+                        // Se o arquivo começar com a árvore de pastas que queremos cortar, removemos ela
+                        if (!string.IsNullOrEmpty(rootToStrip) && relativePath.StartsWith(rootToStrip, StringComparison.OrdinalIgnoreCase))
+                        {
+                            relativePath = relativePath.Substring(rootToStrip.Length);
+                        }
+
+                        // Converte de volta para o padrão de barras do Windows (\)
+                        string localRelativePath = relativePath.Replace('/', '\\');
+                        string outPath = Path.Combine(destinationDir, localRelativePath);
+
+                        // Garante que se houver subpastas internas a partir dali, elas sejam criadas
+                        string? fileDir = Path.GetDirectoryName(outPath);
+                        if (!string.IsNullOrEmpty(fileDir) && !Directory.Exists(fileDir))
+                        {
+                            Directory.CreateDirectory(fileDir);
+                        }
+
+                        // Extrai o arquivo na sua nova posição simplificada
+                        _currentReader!.ExtractEntry(entry, outPath);
+
+                        done++;
+                        ReportProgress(done, total, "Extraindo selecionado(s)");
+                    }
+                });
+
+                lblStatus.Text = "Pronto";
+                MessageBox.Show("Pasta extraída respeitando o nível selecionado!", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                lblStatus.Text = "Erro na extração";
+                MessageBox.Show($"Erro ao extrair: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                HideProgress();
+                btnExtractSelected.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Opção 2: Extrai estritamente os arquivos que estão marcados/selecionados na ListView
+        /// </summary>
+        private async Task ExtractOnlySelectedFilesAsync()
+        {
             if (_currentReader == null || lstEntries.SelectedItems.Count == 0) return;
 
             var selectedEntries = lstEntries.SelectedItems
@@ -456,15 +719,11 @@ namespace PangYa_Suite_Tools
                 .Where(en => en.Type != PakFileEntryType.Directory)
                 .ToList();
 
-            if (selectedEntries.Count == 0)
-            {
-                MessageBox.Show("Selecione ao menos um arquivo (pastas não podem ser extraídas diretamente).",
-                    "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            if (selectedEntries.Count == 0) return;
 
             string destinationDir;
 
+            // Se for apenas um arquivo, permite escolher o nome exato do arquivo (SaveFileDialog)
             if (selectedEntries.Count == 1)
             {
                 string suggestedName = Path.GetFileName(selectedEntries[0].Name.Replace('/', '\\'));
@@ -478,9 +737,13 @@ namespace PangYa_Suite_Tools
                 destinationDir = Path.GetDirectoryName(saveFileDialog.FileName) ?? "./";
                 await RunExtractionAsync(selectedEntries, destinationDir, saveFileDialog.FileName);
             }
+            // Se forem vários arquivos da lista, pede a pasta de destino
             else
             {
-                using var folderDialog = new FolderBrowserDialog { Description = "Selecione a pasta de destino para os arquivos selecionados" };
+                using var folderDialog = new FolderBrowserDialog
+                {
+                    Description = "Selecione a pasta de destino para os arquivos selecionados"
+                };
                 if (folderDialog.ShowDialog() != DialogResult.OK) return;
 
                 destinationDir = folderDialog.SelectedPath;
@@ -600,14 +863,16 @@ namespace PangYa_Suite_Tools
                 EntryType: (PakFileEntryType)cboCompressType.SelectedItem,
                 CompressLevel: (byte)numCompressLevel.Value,
                 LocationKeys: _currentReader?.LocationKeys ?? (uint[])selectedRegion.Keys,
-                Author: _currentReader?.Header.Author ?? "PangYaSuiteTools");
+                Author: _currentReader?.Header.Author ?? "SuiteTools");
         }
 
         private async void btnUpdatePak_Click(object sender, EventArgs e)
         {
             if (_currentReader == null || string.IsNullOrEmpty(txtPakPath.Text) || !File.Exists(txtPakPath.Text))
             {
-                MessageBox.Show("Selecione um arquivo .pak ativo primeiro.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                                    GetText("Select an active .pak file first.", "Selecione um arquivo .pak ativo primeiro."),
+                                    GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -632,7 +897,9 @@ namespace PangYa_Suite_Tools
         {
             if (_currentReader == null || string.IsNullOrEmpty(txtPakPath.Text) || !File.Exists(txtPakPath.Text))
             {
-                MessageBox.Show("Selecione um arquivo .pak ativo primeiro.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    GetText("Select an active .pak file first.", "Selecione um arquivo .pak ativo primeiro."),
+                    GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -641,7 +908,7 @@ namespace PangYa_Suite_Tools
             string pakPath = txtPakPath.Text;
             var reader = _currentReader;
 
-            lblStatus.Text = "Mesclando e reconstruindo PAK...";
+            lblStatus.Text = GetText("Merging and rebuilding PAK...", "Mesclando e reconstruindo PAK...");
             btnUpdatePak.Enabled = false;
 
             try
@@ -652,19 +919,19 @@ namespace PangYa_Suite_Tools
                 {
                     PakManager.InjectFiles(pakPath, reader, items, options,
                         log: msg => { },
-                        onProgress: (done, total) => ReportProgress(done, total, "Reconstruindo PAK"));
+                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")));
                 });
 
-                lblStatus.Text = "PAK atualizado com sucesso!";
-                MessageBox.Show($"{items.Count} arquivo(s) injetado(s) e o PAK foi reconstruído!",
-                    "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
+                lblStatus.Text = GetText("PAK updated successfully!", "PAK atualizado com sucesso!");
+                MessageBox.Show(
+                      $"{items.Count} {GetText("file(s) injected and the PAK was rebuilt!", "arquivo(s) injetado(s) e o PAK foi reconstruído!")}",
+                      GetText("Success", "Sucesso"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadPak(pakPath);
             }
             catch (Exception ex)
             {
-                lblStatus.Text = "Erro ao atualizar";
-                MessageBox.Show($"Falha na reconstrução: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                lblStatus.Text = GetText("Error injecting", "Erro ao injetar");
+                MessageBox.Show($"Injeção falhou: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -739,39 +1006,78 @@ namespace PangYa_Suite_Tools
         {
             if (_currentReader == null || string.IsNullOrEmpty(txtPakPath.Text) || !File.Exists(txtPakPath.Text))
             {
-                MessageBox.Show("Selecione um arquivo .pak ativo primeiro.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    GetText("Select an active .pak file first.", "Selecione um arquivo .pak ativo primeiro."),
+                    GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            if (lstEntries.SelectedItems.Count == 0)
+            List<string> namesToRemove = [];
+            string confirmationMessage = "";
+
+            if (lstEntries.SelectedItems.Count > 0)
             {
-                MessageBox.Show("Selecione ao menos um arquivo para remover.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+                namesToRemove = lstEntries.SelectedItems
+                    .Cast<ListViewItem>()
+                    .Select(i => (PakFileEntry)i.Tag)
+                    .Where(en => en.Type != PakFileEntryType.Directory)
+                    .Select(en => en.Name)
+                    .ToList();
 
-            var namesToRemove = lstEntries.SelectedItems
-                .Cast<ListViewItem>()
-                .Select(i => (PakFileEntry)i.Tag)
-                .Where(en => en.Type != PakFileEntryType.Directory)
-                .Select(en => en.Name)
-                .ToList();
+                confirmationMessage = GetText($"Remove {namesToRemove.Count} selected file(s) from PAK?", $"Remover {namesToRemove.Count} arquivo(s) selecionado(s) do PAK?");
+            }
+            else if (tvFolders.SelectedNode != null)
+            {
+                string rawTreePath = tvFolders.SelectedNode.FullPath;
+                string virtualTargetFolder = rawTreePath
+                    .Replace("🗂 ", "").Replace("🗂", "")
+                    .Replace("📁 ", "").Replace("📁", "")
+                    .Replace('\\', '/');
+
+                if (virtualTargetFolder.StartsWith("Todos os Arquivos/", StringComparison.OrdinalIgnoreCase))
+                    virtualTargetFolder = virtualTargetFolder.Substring("Todos os Arquivos/".Length);
+                else if (virtualTargetFolder.Equals("Todos os Arquivos", StringComparison.OrdinalIgnoreCase))
+                    virtualTargetFolder = "";
+
+                if (string.IsNullOrEmpty(virtualTargetFolder))
+                {
+                    MessageBox.Show(
+                        GetText("Removing the entire root folder is not allowed. To empty a PAK, create a new .pak file.", "Não é permitido remover a pasta raiz inteira. Se deseja esvaziar o PAK, crie um novo arquivo .pak."),
+                        GetText("Invalid Operation", "Operação Inválida"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                string prefix = virtualTargetFolder.Trim('/') + "/";
+                namesToRemove = _currentReader.Entries
+                    .Where(en => en.Type != PakFileEntryType.Directory &&
+                                 en.Name.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .Select(en => en.Name)
+                    .ToList();
+
+                string folderName = tvFolders.SelectedNode.Text.Replace("📁 ", "");
+                confirmationMessage = GetText(
+                    $"You are about to remove the folder '{folderName}' and ALL its {namesToRemove.Count} file(s).\n\nDo you want to continue?",
+                    $"Você está prestes a remover a pasta '{folderName}' e TODOS os {namesToRemove.Count} arquivo(s) de dentro dela.\n\nDeseja continuar?");
+            }
 
             if (namesToRemove.Count == 0)
             {
-                MessageBox.Show("Pastas não podem ser removidas diretamente; selecione os arquivos dentro dela.",
-                    "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    GetText("Select files from the list or a folder from the treeview to remove.", "Selecione arquivos na lista ou uma pasta na árvore lateral para remover."),
+                    GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             var confirm = MessageBox.Show(
-                $"Remover {namesToRemove.Count} arquivo(s) do PAK?\nO PAK será reconstruído e um backup (.bak) será criado.",
-                "Confirmar remoção", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                $"{confirmationMessage}\n\n{GetText("The PAK will be rebuilt and a backup (.bak) will be created automatically.", "O PAK será reconstruído e um backup (.bak) será criado automaticamente.")}",
+                GetText("Confirm Removal", "Confirmar remoção"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
             if (confirm != DialogResult.Yes) return;
 
             string pakPath = txtPakPath.Text;
             var reader = _currentReader;
 
-            lblStatus.Text = "Removendo e reconstruindo PAK...";
+            lblStatus.Text = GetText("Removing and rebuilding PAK...", "Removendo e reconstruindo PAK...");
             btnRemoveSelected.Enabled = false;
 
             try
@@ -782,19 +1088,20 @@ namespace PangYa_Suite_Tools
                 {
                     PakManager.RemoveFiles(pakPath, reader, namesToRemove, options,
                         log: msg => { },
-                        onProgress: (done, total) => ReportProgress(done, total, "Reconstruindo PAK"));
+                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")));
                 });
 
-                lblStatus.Text = "Arquivo(s) removido(s) com sucesso!";
-                MessageBox.Show("O(s) arquivo(s) selecionado(s) foram removidos e o PAK foi reconstruído!",
-                    "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                lblStatus.Text = GetText("Removal completed", "Remoção concluída");
+                MessageBox.Show(
+                    GetText("The selected items were removed successfully and the PAK file was rebuilt!", "Os itens selecionados foram removidos com sucesso e o arquivo PAK foi reconstruído!"),
+                    GetText("Success", "Sucesso"), MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 LoadPak(pakPath);
             }
             catch (Exception ex)
             {
-                lblStatus.Text = "Erro ao remover";
-                MessageBox.Show($"Falha na remoção: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                lblStatus.Text = GetText("Error removing", "Erro ao remover");
+                MessageBox.Show($"{GetText("Failure:", "Falha na remoção:")} {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -818,11 +1125,13 @@ namespace PangYa_Suite_Tools
             string source = txtSourceFolder.Text;
             if (string.IsNullOrEmpty(source) || !Directory.Exists(source))
             {
-                MessageBox.Show("Selecione um diretório de origem válido.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                          GetText("Select a valid source directory.", "Selecione um diretório de origem válido."),
+                          GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            using var saveFileDialog = new SaveFileDialog { Filter = "Pangya PAK Files (*.pak)|*.pak", FileName = "ProjectGxxx.pak" };
+            using var saveFileDialog = new SaveFileDialog { Filter = "PangYa PAK|*.pak", Title = GetText("Save New PAK", "Salvar Novo PAK") };
             if (saveFileDialog.ShowDialog() == DialogResult.OK)
             {
                 try
@@ -831,7 +1140,7 @@ namespace PangYa_Suite_Tools
                     if (selectedItem != null)
                     {
                         btnCreatePak.Enabled = false;
-                        lblStatus.Text = "Compilando PAK...";
+                        lblStatus.Text = GetText("Compiling PAK...", "Compilando PAK...");
                         uint[] selectedKeys = selectedItem.Keys;//name is keys, label is name key 
                         var selectedVersion = (PakFileEntryVersion)cboVersion.SelectedItem;
                         //minha tecnica antiga para criar paks raw
@@ -845,7 +1154,7 @@ namespace PangYa_Suite_Tools
                         {
                             EntryVersion = selectedVersion,
                             EntryType = (PakFileEntryType)cboCompressType.SelectedItem,
-                            CompressLevel = (byte)numCompressLevel.Value, 
+                            CompressLevel = (byte)numCompressLevel.Value,
                             // Se não for Raw e selectedKeys vier nulo por falha de seleção, aplica o fallback JP
                             LocationKeys = selectedKeys ?? (selectedVersion == PakFileEntryVersion.Raw ? Array.Empty<uint>() : PakKeys.JP),
                             Author = "PakToolWinForms" // Assinatura do PAK
@@ -853,21 +1162,23 @@ namespace PangYa_Suite_Tools
                         //inicia a criacao do pak
                         await Task.Run(() => writer.CreateFromDirectory(source, saveFileDialog.FileName));
                         //terminou
-                        lblStatus.Text = "Pronto";
+                        lblStatus.Text = GetText("Ready", "Pronto");
                         btnCreatePak.Enabled = true;
-                        MessageBox.Show("Arquivo .pak gerado com sucesso!", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show(
+                                            GetText(".pak file generated successfully!", "Arquivo .pak gerado com sucesso!"),
+                                            GetText("Success", "Sucesso"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     else
                     {
                         MessageBox.Show("Por favor, selecione uma região válida antes de continuar.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
-                    } 
+                    }
                 }
                 catch (Exception ex)
                 {
-                    lblStatus.Text = "Erro";
+                    lblStatus.Text = GetText("Error creating PAK", "Erro ao criar PAK");
                     btnCreatePak.Enabled = true;
-                    MessageBox.Show($"Erro ao criar o pacote:\n{ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show($"{GetText("Compilation error:", "Erro de compilação:")} {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
@@ -936,6 +1247,16 @@ namespace PangYa_Suite_Tools
                 HideProgress();
                 btnChangeKey.Enabled = true;
             }
+        }
+
+        private string GetText(string en, string br)
+        {
+            if (cboLanguage.SelectedItem is KeyValuePair<string, string> selectedItem)
+            {
+                string _currentLanguage = selectedItem.Value;
+                return (_currentLanguage == "br") ? br : en;
+            }
+            return "";
         }
     }
 }
