@@ -7,6 +7,9 @@
         private System.Windows.Forms.Button btnOpenUpdateList;
         private System.Windows.Forms.Button btnOpenIffManager;
         private System.Windows.Forms.Label lblTitle;
+        private System.Windows.Forms.StatusStrip statusStrip1;
+        private System.Windows.Forms.ToolStripStatusLabel lblLanguage;
+        private System.Windows.Forms.ToolStripComboBox cboLanguage;
 
         protected override void Dispose(bool disposing)
         {
@@ -20,8 +23,10 @@
             btnOpenUpdateList = new Button();
             btnOpenIffManager = new Button();
             lblTitle = new Label();
-            cbLanguage = new ComboBox();
-            label1 = new Label();
+            statusStrip1 = new StatusStrip();
+            lblLanguage = new ToolStripStatusLabel();
+            cboLanguage = new ToolStripComboBox();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // btnOpenPakMaker
@@ -67,45 +72,46 @@
             lblTitle.Text = "Pangya Studio Suite - Developer Tool";
             lblTitle.TextAlign = ContentAlignment.MiddleCenter;
             // 
-            // cbLanguage
+            // statusStrip1
             // 
-            cbLanguage.FormattingEnabled = true;
-            cbLanguage.Items.AddRange(new object[] { "Portugues", "English" });
-            cbLanguage.Location = new Point(131, 282);
-            cbLanguage.Name = "cbLanguage";
-            cbLanguage.Size = new Size(121, 23);
-            cbLanguage.TabIndex = 4;
+            statusStrip1.Dock = DockStyle.Bottom;
+            statusStrip1.Items.AddRange(new ToolStripItem[] { lblLanguage, cboLanguage });
+            statusStrip1.Location = new Point(0, 275);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(384, 22);
+            statusStrip1.TabIndex = 4;
             // 
-            // label1
+            // lblLanguage
             // 
-            label1.AutoSize = true;
-            label1.Location = new Point(84, 286);
-            label1.Name = "label1";
-            label1.Size = new Size(47, 15);
-            label1.TabIndex = 5;
-            label1.Text = "Idioma:";
+            lblLanguage.Name = "lblLanguage";
+            lblLanguage.Size = new Size(47, 17);
+            lblLanguage.Text = "Idioma:";
+            // 
+            // cboLanguage
+            // 
+            cboLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboLanguage.Name = "cboLanguage";
+            cboLanguage.Size = new Size(120, 23);
+            cboLanguage.SelectedIndexChanged += cboLanguage_SelectedIndexChanged;
             // 
             // FrmMenu
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(384, 332);
-            Controls.Add(label1);
-            Controls.Add(cbLanguage);
+            ClientSize = new Size(384, 297);
             Controls.Add(btnOpenIffManager);
             Controls.Add(btnOpenUpdateList);
             Controls.Add(btnOpenPakMaker);
             Controls.Add(lblTitle);
+            Controls.Add(statusStrip1);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             Name = "FrmMenu";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Pangya Studio - Menu Principal";
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
-            PerformLayout();
         }
-
-        private ComboBox cbLanguage;
-        private Label label1;
     }
 }

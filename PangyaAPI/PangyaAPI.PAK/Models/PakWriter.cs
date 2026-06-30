@@ -68,18 +68,30 @@ namespace PangyaAPI.PAK.Models
         }
 
         private void CreateFromEntries(List<(bool isDir, string path)> entries,
-                                string baseDir,
-                                string outputPath,
-                                Action<string>? log)
+                         string baseDir,
+                         string outputPath,
+                         Action<string>? log,
+                         Action<int, int>? onProgress = null)
         {
             using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true);//deveria euc-kr
+            using var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true);
 
             var fileEntries = new List<PakFileEntry>();
 
-            // 1º PASSO: Gravar os arquivos e catalogar metadados PUROS (Sem criptografia ainda)
-            foreach (var (isDir, path) in entries)
+            // Estrutura intermediária pra guardar o resultado da compressão de cada item,
+            // calculado em paralelo, ANTES de escrever sequencialmente no stream.
+            var compressedResults = new (bool isDir, string relativeName, byte[] nameField, byte type,
+                                          byte[]? compressedData, uint size)[entries.Count];
+
+            int totalFiles = entries.Count(e => !e.isDir);
+            int done = 0;
+            object progressLock = new();
+
+            // ── FASE 1: leitura + compressão em PARALELO (CPU-bound, usa todos os núcleos) ──
+            Parallel.For(0, entries.Count, i =>
             {
+                var (isDir, path) = entries[i];
+
                 string relativeName = path.Length == baseDir.Length
                     ? Path.GetFileName(path)
                     : path.Substring(baseDir.Length);
@@ -94,11 +106,9 @@ namespace PangyaAPI.PAK.Models
                 byte[] nameField = new byte[nameAligned];
                 Array.Copy(nameBytes, nameField, nameLen);
 
-                // O offset real em disco é a posição ATUAL do BinaryWriter antes de gravar os dados do arquivo
-                uint currentOffset = (uint)bw.BaseStream.Position;
-                uint size = 0u;
-                uint compSz = 0u;
                 var type = isDir ? PakFileEntryType.Directory : EntryType;
+                byte[]? compressed = null;
+                uint size = 0u;
 
                 if (!isDir)
                 {
@@ -108,61 +118,62 @@ namespace PangyaAPI.PAK.Models
                     string ext = Path.GetExtension(path).ToLowerInvariant();
                     if (ext == ".wav" || ext == ".mp3") type = PakFileEntryType.Raw;
 
-                    byte[]? compressed = null;
                     if (type == PakFileEntryType.Raw)
-                    {
                         compressed = fileData;
-                    }
                     else if (type == PakFileEntryType.LZ77)
-                    {
                         compressed = Lz77.Compress(fileData, CompressLevel, null);
-                    }
                     else if (type == PakFileEntryType.LZ772)
-                    {
                         compressed = Lz772.Compress(fileData, CompressLevel, null);
-                    }
 
                     if (compressed == null)
                         throw new InvalidOperationException($"Falha ao comprimir: {path}");
 
-                    compSz = (uint)compressed.Length;
-                    bw.Write(compressed); // Escreve no arquivo binário
+                    int progressDone = Interlocked.Increment(ref done);
+                    lock (progressLock) { onProgress?.Invoke(progressDone, totalFiles); }
                 }
 
-                // Adiciona à lista temporária com os valores REAIS (puros)
+                compressedResults[i] = (isDir, relativeName, nameField, (byte)type, compressed, size);
+            });
+
+            // ── FASE 2: escrita SEQUENCIAL no stream (mantém offsets corretos) ──
+            foreach (var (isDir, relativeName, nameField, typeRaw, compressed, size) in compressedResults)
+            {
+                var type = (PakFileEntryType)typeRaw;
+                uint currentOffset = (uint)bw.BaseStream.Position;
+                uint compSz = 0u;
+
+                if (!isDir && compressed != null)
+                {
+                    compSz = (uint)compressed.Length;
+                    bw.Write(compressed);
+                }
+
                 var entry = new PakFileEntry
                 {
-                    NameLength = (byte)(EntryVersion == PakFileEntryVersion.V3 ? nameAligned : nameLen),
+                    NameLength = (byte)(EntryVersion == PakFileEntryVersion.V3 ? nameField.Length : Encoding.ASCII.GetByteCount(relativeName)),
                     Type = type,
                     Version = EntryVersion,
-                    Offset = currentOffset, // Guardamos o offset correto
+                    Offset = currentOffset,
                     CompressSize = compSz,
-                    Size = size,            // Guardamos o tamanho original correto
+                    Size = size,
                 };
-                // IMPORTANTE: usar SetRawNameForWrite, e não a propriedade NameRaw.
-                // O setter de NameRaw sanitiza (remove o padding de zeros) pensando
-                // no cenário de LEITURA, o que corrompia o array aqui na escrita e
-                // desalinhava todas as entries seguintes na tabela.
-                entry.SetRawNameForWrite(nameField); // Nome limpo (com padding de zeros se V3)
+                entry.SetRawNameForWrite(nameField);
                 fileEntries.Add(entry);
             }
 
-            // Escreve autor e o tamanho do campo do autor
+            // ── resto do método permanece IGUAL (escrita do autor + tabela de entries + footer) ──
             byte[] authorBytes = Encoding.ASCII.GetBytes(Author);
             bw.Write(authorBytes);
             ushort authorLenBE = (ushort)((authorBytes.Length >> 8) | (authorBytes.Length << 8));
             bw.Write(authorLenBE);
 
-            // Marca o início exato da tabela de File Entries no arquivo final
             uint offsetFileEntry = (uint)bw.BaseStream.Position;
 
-            // 2º PASSO: Criptografar e escrever a tabela de entradas (File Entries)
             foreach (var fe in fileEntries)
             {
                 bw.Write(fe.NameLength);
                 bw.Write((byte)(((byte)fe.Version << 4) | (byte)fe.Type));
 
-                // Clona os dados para criptografar apenas no momento do fluxo de escrita
                 uint encOffset = fe.Offset;
                 uint encSize = fe.Size;
                 byte[] encName = (byte[])fe.NameRaw.Clone();
@@ -174,13 +185,11 @@ namespace PangyaAPI.PAK.Models
                 }
                 else if (EntryVersion == PakFileEntryVersion.V3)
                 {
-                    // Junta Size e Offset em um bloco de 64-bit para o XTEA
                     ulong packed = ((ulong)encSize << 32) | encOffset;
                     packed = Xtea.Encrypt(LocationKeys, packed);
                     encSize = (uint)(packed >> 32);
                     encOffset = (uint)(packed & 0xFFFFFFFF);
 
-                    // Criptografa o nome de 8 em 8 bytes alinhados
                     for (int k = 0; k < encName.Length; k += 8)
                     {
                         ulong block = BitConverter.ToUInt64(encName, k);
@@ -190,19 +199,16 @@ namespace PangyaAPI.PAK.Models
                     }
                 }
 
-                // Grava os dados devidamente protegidos na estrutura do arquivo
                 bw.Write(encOffset);
-                bw.Write(fe.CompressSize); // CompressSize NUNCA é encriptado no Pangya
+                bw.Write(fe.CompressSize);
                 bw.Write(encSize);
                 bw.Write(encName);
             }
 
-            // Cabeçalho global do rodapé (Footer Header)
             bw.Write(offsetFileEntry);
             bw.Write((uint)fileEntries.Count);
             bw.Write(PakVersion);
 
-            // Salva o arquivo em disco
             ms.Position = 0;
             using var fs = File.Create(outputPath);
             ms.CopyTo(fs);

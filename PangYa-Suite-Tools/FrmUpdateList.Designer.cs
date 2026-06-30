@@ -44,11 +44,15 @@ namespace PangYa_Suite_Tools
             lblWatchStatus = new Label();
             txtLog = new TextBox();
             lblLog = new Label();
+            statusStrip1 = new StatusStrip();
+            lblLanguage = new ToolStripStatusLabel();
+            cboLanguage = new ToolStripComboBox();
             tabMain.SuspendLayout();
             tabDecrypt.SuspendLayout();
             pnlCryptoDrop.SuspendLayout();
             tabGenerator.SuspendLayout();
             grpConfig.SuspendLayout();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // tabMain
@@ -59,7 +63,7 @@ namespace PangYa_Suite_Tools
             tabMain.Location = new Point(0, 0);
             tabMain.Name = "tabMain";
             tabMain.SelectedIndex = 0;
-            tabMain.Size = new Size(784, 561);
+            tabMain.Size = new Size(784, 538);
             tabMain.TabIndex = 0;
             // 
             // tabDecrypt
@@ -69,7 +73,7 @@ namespace PangYa_Suite_Tools
             tabDecrypt.Location = new Point(4, 24);
             tabDecrypt.Name = "tabDecrypt";
             tabDecrypt.Padding = new Padding(3);
-            tabDecrypt.Size = new Size(776, 533);
+            tabDecrypt.Size = new Size(776, 510);
             tabDecrypt.TabIndex = 0;
             tabDecrypt.Text = " 🔍 Visualizador / Decrypter ";
             tabDecrypt.UseVisualStyleBackColor = true;
@@ -108,7 +112,7 @@ namespace PangYa_Suite_Tools
             txtXmlViewer.Name = "txtXmlViewer";
             txtXmlViewer.ReadOnly = true;
             txtXmlViewer.ScrollBars = ScrollBars.Both;
-            txtXmlViewer.Size = new Size(760, 413);
+            txtXmlViewer.Size = new Size(760, 390);
             txtXmlViewer.TabIndex = 1;
             // 
             // tabGenerator
@@ -121,7 +125,7 @@ namespace PangYa_Suite_Tools
             tabGenerator.Location = new Point(4, 24);
             tabGenerator.Name = "tabGenerator";
             tabGenerator.Padding = new Padding(3);
-            tabGenerator.Size = new Size(776, 533);
+            tabGenerator.Size = new Size(776, 510);
             tabGenerator.TabIndex = 1;
             tabGenerator.Text = " 🛠️ Gerador & Monitoramento ";
             tabGenerator.UseVisualStyleBackColor = true;
@@ -324,7 +328,7 @@ namespace PangYa_Suite_Tools
             txtLog.Name = "txtLog";
             txtLog.ReadOnly = true;
             txtLog.ScrollBars = ScrollBars.Vertical;
-            txtLog.Size = new Size(760, 250);
+            txtLog.Size = new Size(760, 227);
             txtLog.TabIndex = 4;
             // 
             // lblLog
@@ -337,12 +341,34 @@ namespace PangYa_Suite_Tools
             lblLog.TabIndex = 3;
             lblLog.Text = "Histórico / Terminal Log:";
             // 
+            // statusStrip1
+            // 
+            statusStrip1.Items.AddRange(new ToolStripItem[] { lblLanguage, cboLanguage });
+            statusStrip1.Location = new Point(0, 538);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(784, 23);
+            statusStrip1.TabIndex = 1;
+            // 
+            // lblLanguage
+            // 
+            lblLanguage.Name = "lblLanguage";
+            lblLanguage.Size = new Size(47, 18);
+            lblLanguage.Text = "Idioma:";
+            // 
+            // cboLanguage
+            // 
+            cboLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboLanguage.Name = "cboLanguage";
+            cboLanguage.Size = new Size(120, 23);
+            cboLanguage.SelectedIndexChanged += cboLanguage_SelectedIndexChanged;
+            // 
             // FrmUpdateList
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(784, 561);
             Controls.Add(tabMain);
+            Controls.Add(statusStrip1);
             MinimumSize = new Size(800, 600);
             Name = "FrmUpdateList";
             StartPosition = FormStartPosition.CenterScreen;
@@ -355,7 +381,10 @@ namespace PangYa_Suite_Tools
             tabGenerator.PerformLayout();
             grpConfig.ResumeLayout(false);
             grpConfig.PerformLayout();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -385,5 +414,8 @@ namespace PangYa_Suite_Tools
         private System.Windows.Forms.Label lblDropHint;
         private System.Windows.Forms.TextBox txtLog;
         private System.Windows.Forms.Label lblLog;
+        private System.Windows.Forms.StatusStrip statusStrip1;
+        private System.Windows.Forms.ToolStripStatusLabel lblLanguage;
+        private System.Windows.Forms.ToolStripComboBox cboLanguage;
     }
 }

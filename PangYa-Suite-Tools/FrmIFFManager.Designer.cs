@@ -5,6 +5,8 @@
         private System.ComponentModel.IContainer components = null;
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel lblStatus;
+        private System.Windows.Forms.ToolStripStatusLabel lblLanguage;
+        private System.Windows.Forms.ToolStripComboBox cboLanguage;
         private System.Windows.Forms.SplitContainer splitContainerMain;
         private System.Windows.Forms.GroupBox grpIffFiles;
         private System.Windows.Forms.ListBox lstIffFiles;
@@ -25,6 +27,8 @@
         {
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.lblStatus = new System.Windows.Forms.ToolStripStatusLabel();
+            this.lblLanguage = new System.Windows.Forms.ToolStripStatusLabel();
+            this.cboLanguage = new System.Windows.Forms.ToolStripComboBox();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.grpIffFiles = new System.Windows.Forms.GroupBox();
             this.lstIffFiles = new System.Windows.Forms.ListBox();
@@ -46,7 +50,7 @@
             // 
             // statusStrip
             // 
-            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.lblStatus });
+            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.lblStatus, this.lblLanguage, this.cboLanguage });
             this.statusStrip.Location = new System.Drawing.Point(0, 539);
             this.statusStrip.Name = "statusStrip";
             this.statusStrip.Size = new System.Drawing.Size(984, 22);
@@ -58,6 +62,20 @@
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(230, 17);
             this.lblStatus.Text = "Pronto. Selecione o diretório dos arquivos IFF.";
+            // 
+            // lblLanguage
+            // 
+            this.lblLanguage.Margin = new System.Windows.Forms.Padding(20, 3, 0, 2);
+            this.lblLanguage.Name = "lblLanguage";
+            this.lblLanguage.Size = new System.Drawing.Size(47, 17);
+            this.lblLanguage.Text = "Idioma:";
+            // 
+            // cboLanguage
+            // 
+            this.cboLanguage.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cboLanguage.Name = "cboLanguage";
+            this.cboLanguage.Size = new System.Drawing.Size(120, 23);
+            this.cboLanguage.SelectedIndexChanged += new System.EventHandler(this.cboLanguage_SelectedIndexChanged);
             // 
             // splitContainerMain
             // 

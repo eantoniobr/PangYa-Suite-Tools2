@@ -150,13 +150,13 @@ namespace PangyaAPI.PAK.Models
 
         /// <summary>
         /// Extrai todas as entradas cujo nome combine com <paramref name="pattern"/> (suporta '*').
+        /// Versão otimizada com pipeline paralelo (Leitura Sequencial Protegida -> Descompressão Paralela -> Escrita Paralela).
         /// </summary>
-        /// <param name="onProgress">Callback opcional invocado como (arquivosProcessados, totalDeArquivos).</param>
         public void Extract(string pattern, string outputDir = "./",
                             Action<string>? log = null,
                             Action<int, int>? onProgress = null)
         {
-            // Converte wildcard '*' para regex '.*'
+            // 1. Filtragem inicial (Rápida)
             var regexPattern = "^" + Regex.Escape(pattern).Replace(@"\*", ".*") + "$";
             var regex = new Regex(regexPattern, RegexOptions.IgnoreCase);
 
@@ -165,46 +165,93 @@ namespace PangyaAPI.PAK.Models
                 .ToList();
 
             int total = matches.Count;
-            int done = 0;
+            if (total == 0) return;
 
-            foreach (var entry in matches)
+            int done = 0;
+            string baseOutDir = outputDir.TrimEnd('/', '\\') + "/";
+
+            // 2. Processamento em Paralelo usando Parallel.ForEach
+            // Limitamos o grau de paralelismo se necessário, mas por padrão ele usa os cores disponíveis.
+            Parallel.ForEach(matches, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, entry =>
             {
                 string name = entry.Name;
-                log?.Invoke($"Encontrado: {name}");
+                byte[]? compressedBytes = null;
+                byte[]? decompressedData = null;
 
-                string outDir = outputDir.TrimEnd('/', '\\') + "/";
-                string? subDir = Path.GetDirectoryName(name);
-                if (!string.IsNullOrEmpty(subDir))
-                    outDir = Path.Combine(outDir, subDir) + "/";
-
-                Directory.CreateDirectory(outDir);
-
-                string outPath = Path.Combine(outDir, Path.GetFileName(name));
-
-                byte[]? data = ExtractEntryToBytes(entry);
-
-                if (data == null)
+                // FASE 1: Leitura I/O do arquivo PAK (Sequencial obrigatória via Lock)
+                // O objetivo aqui é passar o menor tempo possível dentro do lock. Apenas copiamos os bytes brutos.
+                lock (_ioLock)
                 {
-                    if (entry.Size == 0)
+                    _reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
+
+                    if (entry.Type == PakFileEntryType.Raw)
                     {
-                        data = Array.Empty<byte>();
-                        log?.Invoke($"[Warning] Arquivo Vazio: {name}");
+                        decompressedData = _reader.ReadBytes((int)entry.Size);
                     }
-                    else
+                    else if (entry.Type == PakFileEntryType.LZ77 || entry.Type == PakFileEntryType.LZ772)
                     {
-                        log?.Invoke($"[Erro] Falha ao extrair: {name}");
-                        done++;
-                        onProgress?.Invoke(done, total);
-                        continue;
+                        compressedBytes = _reader.ReadBytes((int)entry.CompressSize);
                     }
                 }
 
-                File.WriteAllBytes(outPath, data);
-                log?.Invoke($"Extraído: {name} → {outPath.Replace("\\", "/")}");
+                // FASE 2: Descompressão (Pesada, CPU-bound) - Fora do Lock, Totalmente Paralela!
+                if (compressedBytes != null)
+                {
+                    try
+                    {
+                        if (entry.Type == PakFileEntryType.LZ77)
+                        {
+                            decompressedData = Lz77.Decompress(compressedBytes, entry.Size, entry.CompressSize);
+                        }
+                        else if (entry.Type == PakFileEntryType.LZ772)
+                        {
+                            decompressedData = Lz772.Decompress(compressedBytes, entry.Size, entry.CompressSize);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        log?.Invoke($"[Erro] Falha ao descomprimir {name}: {ex.Message}");
+                    }
+                }
 
-                done++;
-                onProgress?.Invoke(done, total);
-            }
+                // Tratamento para arquivos vazios
+                if (decompressedData == null && entry.Size == 0)
+                {
+                    decompressedData = Array.Empty<byte>();
+                    log?.Invoke($"[Warning] Arquivo Vazio: {name}");
+                }
+
+                // FASE 3: Preparação de diretório e Escrita em disco (I/O paralelo em arquivos separados)
+                if (decompressedData != null)
+                {
+                    try
+                    {
+                        string outDir = baseOutDir;
+                        string? subDir = Path.GetDirectoryName(name);
+                        if (!string.IsNullOrEmpty(subDir))
+                            outDir = Path.Combine(outDir, subDir) + "/";
+
+                        // Thread-safe por design (cada arquivo/pasta possui caminhos distintos na maioria dos casos)
+                        Directory.CreateDirectory(outDir);
+                        string outPath = Path.Combine(outDir, Path.GetFileName(name));
+
+                        File.WriteAllBytes(outPath, decompressedData);
+                        log?.Invoke($"Extraído: {name} → {outPath.Replace("\\", "/")}");
+                    }
+                    catch (Exception ex)
+                    {
+                        log?.Invoke($"[Erro] Falha ao gravar no disco {name}: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    log?.Invoke($"[Erro] Falha ao extrair dados de: {name}");
+                }
+
+                // Atualização de progresso thread-safe
+                int currentDone = Interlocked.Increment(ref done);
+                onProgress?.Invoke(currentDone, total);
+            });
         }
 
         /// <summary>

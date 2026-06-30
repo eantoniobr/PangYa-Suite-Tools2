@@ -1,4 +1,5 @@
 ﻿
+using System.ComponentModel;
 using System.Text; 
 using PangyaAPI.UpdateList.Flags; 
 using PangyaAPI.UpdateList.Models;
@@ -14,11 +15,81 @@ namespace PangYa_Suite_Tools
         private FileSystemWatcher? _watcher;
         private readonly Lock _generatorLock = new();
         private bool _isMonitoring = false;
+        private bool isInitializingLanguages = true;
 
         public FrmUpdateList()
         {
             InitializeComponent();
+            InitializeLanguageComboBox();
             SetupComponents();
+        }
+
+        private void InitializeLanguageComboBox()
+        {
+            cboLanguage.ComboBox.DisplayMember = "Key";
+            cboLanguage.ComboBox.ValueMember = "Value";
+
+            cboLanguage.Items.Add(new KeyValuePair<string, string>("Português (BR)", "br"));
+            cboLanguage.Items.Add(new KeyValuePair<string, string>("English (US)", "en"));
+            cboLanguage.SelectedIndex = 1;
+
+            isInitializingLanguages = false;
+            ApplyLocalization("en");
+        }
+
+        private void cboLanguage_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (isInitializingLanguages) return;
+
+            if (cboLanguage.SelectedItem is KeyValuePair<string, string> selectedItem)
+            {
+                ApplyLocalization(selectedItem.Value);
+            }
+        }
+
+        private void ApplyLocalization(string lang)
+        {
+            ComponentResourceManager res = new ComponentResourceManager(typeof(FrmUpdateList));
+            string suffix = (lang == "en") ? "_en" : "_br";
+
+            this.Text = res.GetString($"FrmUpdateList{suffix}") ?? this.Text;
+            tabDecrypt.Text = res.GetString($"tabDecrypt{suffix}") ?? tabDecrypt.Text;
+            tabGenerator.Text = res.GetString($"tabGenerator{suffix}") ?? tabGenerator.Text;
+            grpConfig.Text = res.GetString($"grpConfig{suffix}") ?? grpConfig.Text;
+            lblPangyaPath.Text = res.GetString($"lblPangyaPath{suffix}") ?? lblPangyaPath.Text;
+            lblUpdatePath.Text = res.GetString($"lblUpdatePath{suffix}") ?? lblUpdatePath.Text;
+            lblFileKey.Text = res.GetString($"lblFileKey{suffix}") ?? lblFileKey.Text;
+            lblPatchVersion.Text = res.GetString($"lblPatchVersion{suffix}") ?? lblPatchVersion.Text;
+            lblUpdateListVer.Text = res.GetString($"lblUpdateListVer{suffix}") ?? lblUpdateListVer.Text;
+            lblClientPatchNum.Text = res.GetString($"lblClientPatchNum{suffix}") ?? lblClientPatchNum.Text;
+            btnBrowsePangya.Text = res.GetString($"btnBrowsePangya{suffix}") ?? btnBrowsePangya.Text;
+            btnBrowseUpdate.Text = res.GetString($"btnBrowseUpdate{suffix}") ?? btnBrowseUpdate.Text;
+            lblLog.Text = res.GetString($"lblLog{suffix}") ?? lblLog.Text;
+            lblLanguage.Text = res.GetString($"lblLanguage{suffix}") ?? lblLanguage.Text;
+
+            // Estados dinâmicos: só atualiza se não houver monitoramento/drop em andamento, para não confundir o usuário no meio de uma operação
+            if (!_isMonitoring)
+            {
+                btnToggleWatch.Text = GetText("▶️ Start Monitoring", "▶️ Iniciar Monitoramento");
+                lblWatchStatus.Text = GetText("INACTIVE", "INATIVO");
+            }
+            else
+            {
+                btnToggleWatch.Text = GetText("🛑 Stop Monitoring", "🛑 Parar Monitoramento");
+                lblWatchStatus.Text = GetText("ACTIVELY MONITORING", "MONITORANDO ATIVAMENTE");
+            }
+
+            if (string.IsNullOrEmpty(txtXmlViewer.Text))
+            {
+                lblDropHint.Text = GetText("🪂 Drag and drop an encrypted 'updatelist' file here to view the decoded XML in real time.", "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.");
+            }
+        }
+
+        private string GetText(string en, string br)
+        {
+            if (cboLanguage.SelectedItem is KeyValuePair<string, string> selectedItem)
+                return (selectedItem.Value == "br") ? br : en;
+            return en;
         }
 
         private void SetupComponents()
@@ -40,7 +111,7 @@ namespace PangYa_Suite_Tools
             txtUpdateListVer.Text = DateTime.Now.ToString("yyyyMMdd01");
             txtClientPatchNum.Text = "1";
 
-            Log("Interface inicializada no formato multi-abas (Estilo PakMaker). Pronta para uso.");
+            Log(GetText("Interface initialized in multi-tab mode (PakMaker style). Ready to use.", "Interface inicializada no formato multi-abas (Estilo PakMaker). Pronta para uso."));
         }
 
         #region ABA 1: VISUALIZADOR / DECRYPT DE XML
@@ -60,7 +131,7 @@ namespace PangYa_Suite_Tools
             string targetFile = files[0];
 
             txtXmlViewer.Clear();
-            lblDropHint.Text = $"Processando: {Path.GetFileName(targetFile)}...";
+            lblDropHint.Text = $"{GetText("Processing:", "Processando:")} {Path.GetFileName(targetFile)}...";
 
             string selectedKeyName = string.Empty;
             this.Invoke(() => selectedKeyName = cboFileKey.SelectedItem!.ToString()!);
@@ -73,7 +144,7 @@ namespace PangYa_Suite_Tools
 
                     if (operacao == OperacaoEnum.Decrypt)
                     {
-                        this.Invoke(() => Log($"🔒 Arquivo protegido detectado. Testando chave [{selectedKeyName}]..."));
+                        this.Invoke(() => Log($"🔒 {GetText("Protected file detected. Testing key", "Arquivo protegido detectado. Testando chave")} [{selectedKeyName}]..."));
 
                         uint[] selectedKey = GetKeysByName(selectedKeyName);
                         var reader = new UpdateReader(selectedKey);
@@ -93,15 +164,15 @@ namespace PangYa_Suite_Tools
 
                                 this.Invoke(() => {
                                     txtXmlViewer.Text = formattedXml;
-                                    lblDropHint.Text = "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.";
-                                    Log($"✅ [SUCESSO] Descriptografado com a chave {selectedKeyName}!");
+                                    lblDropHint.Text = GetText("🪂 Drag and drop an encrypted 'updatelist' file here to view the decoded XML in real time.", "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.");
+                                    Log($"✅ [{GetText("SUCCESS", "SUCESSO")}] {GetText("Decrypted with key", "Descriptografado com a chave")} {selectedKeyName}!");
                                 });
                                 return;
                             }
                         }
                         catch
                         {
-                            this.Invoke(() => Log($"⚠️ Falha com a chave [{selectedKeyName}]. Iniciando scanner de força-bruta automático..."));
+                            this.Invoke(() => Log($"⚠️ {GetText("Failed with key", "Falha com a chave")} [{selectedKeyName}]. {GetText("Starting automatic brute-force scanner...", "Iniciando scanner de força-bruta automático...")}"));
                         }
 
                         var result = UpdateKeyDetector.DetectAndSetKey(targetFile, out uint[]? autoDetectedKey, out byte[]? decryptedData, out string document);
@@ -115,15 +186,15 @@ namespace PangYa_Suite_Tools
 
                             this.Invoke(() => {
                                 txtXmlViewer.Text = formattedXml;
-                                lblDropHint.Text = "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.";
-                                Log($"✅ [BRUTE-FORCE SUCESSO] Chave identificada com sucesso!");
+                                lblDropHint.Text = GetText("🪂 Drag and drop an encrypted 'updatelist' file here to view the decoded XML in real time.", "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.");
+                                Log($"✅ [{GetText("BRUTE-FORCE SUCCESS", "BRUTE-FORCE SUCESSO")}] {GetText("Key identified successfully!", "Chave identificada com sucesso!")}");
                             });
                         }
                         else
                         {
                             this.Invoke(() => {
-                                lblDropHint.Text = "❌ Erro: Nenhuma chave decodificou a estrutura.";
-                                Log("❌ [FALHA TOTAL] Nenhuma chave do banco de dados conhecido conseguiu abrir a estrutura deste arquivo.");
+                                lblDropHint.Text = GetText("❌ Error: No key decoded the structure.", "❌ Erro: Nenhuma chave decodificou a estrutura.");
+                                Log($"❌ [{GetText("TOTAL FAILURE", "FALHA TOTAL")}] {GetText("No key from the known database was able to open this file's structure.", "Nenhuma chave do banco de dados conhecido conseguiu abrir a estrutura deste arquivo.")}");
                             });
                         }
                     }
@@ -134,23 +205,23 @@ namespace PangYa_Suite_Tools
 
                         this.Invoke(() => {
                             txtXmlViewer.Text = formattedXml;
-                            lblDropHint.Text = "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.";
-                            Log("📋 O arquivo dropado já está em modo texto/XML puro. Exibido formatado no painel.");
+                            lblDropHint.Text = GetText("🪂 Drag and drop an encrypted 'updatelist' file here to view the decoded XML in real time.", "🪂 Arraste e solte um arquivo 'updatelist' criptografado aqui para visualizar o XML decodificado em tempo real.");
+                            Log($"📋 {GetText("The dropped file is already in plain text/XML mode. Displayed formatted in the panel.", "O arquivo dropado já está em modo texto/XML puro. Exibido formatado no painel.")}");
                         });
                     }
                     else
                     {
                         this.Invoke(() => {
-                            lblDropHint.Text = "⚠️ Arquivo inválido ou corrompido.";
-                            Log("⚠️ Arquivo inválido ou corrompido.");
+                            lblDropHint.Text = GetText("⚠️ Invalid or corrupted file.", "⚠️ Arquivo inválido ou corrompido.");
+                            Log(GetText("⚠️ Invalid or corrupted file.", "⚠️ Arquivo inválido ou corrompido."));
                         });
                     }
                 }
                 catch (Exception ex)
                 {
                     this.Invoke(() => {
-                        lblDropHint.Text = "❌ Falha crítica ao analisar arquivo.";
-                        Log($"❌ [ERRO DE ANÁLISE] {ex.Message}");
+                        lblDropHint.Text = GetText("❌ Critical failure while parsing file.", "❌ Falha crítica ao analisar arquivo.");
+                        Log($"❌ [{GetText("PARSE ERROR", "ERRO DE ANÁLISE")}] {ex.Message}");
                     });
                 }
             });
@@ -161,13 +232,13 @@ namespace PangYa_Suite_Tools
 
         private void btnBrowsePangya_Click(object sender, EventArgs e)
         {
-            using var fbd = new FolderBrowserDialog { Description = "Selecione a pasta raiz do Pangya (onde ficam os arquivos executáveis e .pak)" };
+            using var fbd = new FolderBrowserDialog { Description = GetText("Select the root Pangya folder (where the executables and .pak files are)", "Selecione a pasta raiz do Pangya (onde ficam os arquivos executáveis e .pak)") };
             if (fbd.ShowDialog() == DialogResult.OK) txtPangyaPath.Text = fbd.SelectedPath;
         }
 
         private void btnBrowseUpdate_Click(object sender, EventArgs e)
         {
-            using var fbd = new FolderBrowserDialog { Description = "Selecione a pasta do WebServer de destino do Update" };
+            using var fbd = new FolderBrowserDialog { Description = GetText("Select the destination WebServer folder for the Update", "Selecione a pasta do WebServer de destino do Update") };
             if (fbd.ShowDialog() == DialogResult.OK) txtUpdatePath.Text = fbd.SelectedPath;
         }
 
@@ -184,12 +255,12 @@ namespace PangYa_Suite_Tools
 
             if (!Directory.Exists(pangyaPath) || !Directory.Exists(destPath))
             {
-                MessageBox.Show("Verifique se as pastas de Origem e de Destino do WebServer são caminhos de diretórios válidos.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(GetText("Check whether the Source and WebServer Destination folders are valid directory paths.", "Verifique se as pastas de Origem e de Destino do WebServer são caminhos de diretórios válidos."), GetText("Warning", "Aviso"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             btnToggleWatch.Enabled = false;
-            lblWatchStatus.Text = "Inicializando...";
+            lblWatchStatus.Text = GetText("Initializing...", "Inicializando...");
 
             try
             {
@@ -203,7 +274,7 @@ namespace PangYa_Suite_Tools
                 await Task.Run(() =>
                 {
                     _updateMaker = new UpdateMaker();
-                    this.Invoke(() => Log("Varrendo a árvore de diretórios e gerando mapeamento inicial do cliente..."));
+                    this.Invoke(() => Log(GetText("Scanning directory tree and generating initial client mapping...", "Varrendo a árvore de diretórios e gerando mapeamento inicial do cliente...")));
 
                     string finalOutputPath = Path.Combine(destPath, "updatelist");
 
@@ -220,15 +291,15 @@ namespace PangYa_Suite_Tools
                 _watcher.EnableRaisingEvents = true;
 
                 _isMonitoring = true;
-                btnToggleWatch.Text = "🛑 Parar Monitoramento";
+                btnToggleWatch.Text = GetText("🛑 Stop Monitoring", "🛑 Parar Monitoramento");
                 btnToggleWatch.BackColor = Color.Tomato;
-                lblWatchStatus.Text = "MONITORANDO ATIVAMENTE";
+                lblWatchStatus.Text = GetText("ACTIVELY MONITORING", "MONITORANDO ATIVAMENTE");
                 lblWatchStatus.ForeColor = Color.Green;
-                Log($"[SERVIÇO] FileSystemWatcher ativo na pasta: {pangyaPath}");
+                Log($"[{GetText("SERVICE", "SERVIÇO")}] {GetText("FileSystemWatcher active on folder:", "FileSystemWatcher ativo na pasta:")} {pangyaPath}");
             }
             catch (Exception ex)
             {
-                Log($"[ERRO INICIALIZAÇÃO] {ex.Message}");
+                Log($"[{GetText("INIT ERROR", "ERRO INICIALIZAÇÃO")}] {ex.Message}");
                 StopMonitoring();
             }
             finally
@@ -247,11 +318,11 @@ namespace PangYa_Suite_Tools
             }
 
             _isMonitoring = false;
-            btnToggleWatch.Text = "▶️ Iniciar Monitoramento";
+            btnToggleWatch.Text = GetText("▶️ Start Monitoring", "▶️ Iniciar Monitoramento");
             btnToggleWatch.BackColor = Color.LightGreen;
-            lblWatchStatus.Text = "INATIVO";
+            lblWatchStatus.Text = GetText("INACTIVE", "INATIVO");
             lblWatchStatus.ForeColor = Color.DimGray;
-            Log("Monitoramento em background foi encerrado.");
+            Log(GetText("Background monitoring has been stopped.", "Monitoramento em background foi encerrado."));
         }
 
         private void OnFileChanged(object sender, FileSystemEventArgs e)
@@ -271,7 +342,7 @@ namespace PangYa_Suite_Tools
                 if (_fileCache.TryGetValue(e.FullPath, out var last) && last.Length == currentState.Length) return;
                 _fileCache[e.FullPath] = currentState;
 
-                this.Invoke(() => Log($"[DETECTADO] Modificação no arquivo: {e.Name}"));
+                this.Invoke(() => Log($"[{GetText("DETECTED", "DETECTADO")}] {GetText("File modification:", "Modificação no arquivo:")} {e.Name}"));
 
                 string pangyaPath = string.Empty;
                 string destPath = string.Empty;
@@ -303,11 +374,11 @@ namespace PangYa_Suite_Tools
                     // Gera o patch mantendo a paridade de versões modificadas em tempo real
                     _updateMaker?.GenerateFromDirectory(pangyaPath, finalOutputPath, regionKeys, patchVersion, updateVersion, patchNum);
 
-                    this.Invoke(() => Log($"✨ [COMPILADO] updatelist assinado com sucesso! Gatilho: {e.Name}"));
+                    this.Invoke(() => Log($"✨ [{GetText("COMPILED", "COMPILADO")}] {GetText("updatelist signed successfully! Trigger:", "updatelist assinado com sucesso! Gatilho:")} {e.Name}"));
                 }
                 catch (Exception ex)
                 {
-                    this.Invoke(() => Log($"[ERRO E/S] Não foi possível gerenciar o arquivo {e.Name}: {ex.Message}"));
+                    this.Invoke(() => Log($"[{GetText("I/O ERROR", "ERRO E/S")}] {GetText("Could not manage the file", "Não foi possível gerenciar o arquivo")} {e.Name}: {ex.Message}"));
                 }
             }
         }

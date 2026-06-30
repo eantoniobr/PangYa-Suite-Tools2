@@ -32,29 +32,68 @@ namespace PangyaAPI.PAK.Models
     {
         /// <summary>
         /// Extrai todas as entradas (exceto as filtradas por <paramref name="skip"/>)
-        /// preservando a estrutura de pastas original do PAK.
+        /// preservando a estrutura de pastas original do PAK de forma paralela e otimizada.
         /// </summary>
         private static void ExtractAllPreservingStructure(PakReader reader, string tempDir,
-                                                            Func<PakFileEntry, bool>? skip = null,
-                                                            Action<int, int>? onProgress = null)
+                                                           Func<PakFileEntry, bool>? skip = null,
+                                                           Action<int, int>? onProgress = null)
         {
             var files = reader.Entries.Where(e => e.Type != PakFileEntryType.Directory).ToList();
-            int total = files.Count;
+
+            // Filtra os arquivos válidos antes de iniciar o I/O
+            var filesToProcess = files.Where(entry => skip == null || !skip(entry)).ToList();
+            int total = filesToProcess.Count;
+            if (total == 0) return;
+
             int done = 0;
 
-            foreach (var entry in files)
-            {
-                done++;
+            // Cria uma estrutura para bufferizar os dados descomprimidos na RAM
+            var fileBuffer = new (string DestPath, byte[] Data)[total];
 
-                if (skip == null || !skip(entry))
+            // FASE 1 & 2: Leitura paralela do PAK e descompressão puramente em memória
+            Parallel.For(0, total, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
+            {
+                var entry = filesToProcess[i];
+
+                // Reaproveita o método rápido thread-safe do PakReader
+                byte[]? data = reader.ExtractEntryToBytes(entry);
+
+                if (data == null && entry.Size == 0)
+                    data = Array.Empty<byte>();
+
+                if (data != null)
                 {
                     string relativePath = entry.Name.Replace('/', '\\');
                     string destPath = Path.Combine(tempDir, relativePath);
-                    reader.ExtractEntry(entry, destPath);
+                    fileBuffer[i] = (destPath, data);
                 }
 
-                onProgress?.Invoke(done, total);
+                // Relata progresso em lotes seguros
+                int currentDone = Interlocked.Increment(ref done);
+                if (currentDone % 50 == 0 || currentDone == total)
+                {
+                    onProgress?.Invoke(currentDone, total);
+                }
+            });
+
+            // FASE 3: Mapeamento de pastas únicas e escrita em disco contínua
+            var directoriesToCreate = fileBuffer
+                .Where(f => f.DestPath != null)
+                .Select(f => Path.GetDirectoryName(f.DestPath))
+                .Distinct();
+
+            foreach (var dir in directoriesToCreate)
+            {
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
             }
+
+            // Escrita paralela e direta no SSD
+            Parallel.ForEach(fileBuffer, file =>
+            {
+                if (file.DestPath == null || file.Data == null) return;
+                File.WriteAllBytes(file.DestPath, file.Data);
+            });
         }
 
         /// <summary>

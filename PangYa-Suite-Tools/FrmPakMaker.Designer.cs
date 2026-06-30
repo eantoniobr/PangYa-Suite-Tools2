@@ -56,6 +56,8 @@
         // trocar de linguagem
         private System.Windows.Forms.ToolStripStatusLabel lblLanguage;
         private System.Windows.Forms.ToolStripComboBox cboLanguage;
+        private ToolStripMenuItem? _menuExtractSingle;
+        private ToolStripMenuItem? _menuRemoveSingle;
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
