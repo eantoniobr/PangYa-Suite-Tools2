@@ -130,6 +130,9 @@ namespace PangYa_Suite_Tools
             lstEntries.AllowDrop = true;
             lstEntries.DragEnter += LstEntries_DragEnter;
             lstEntries.DragDrop += LstEntries_DragDrop;
+            //permitir arrastar arquivos para fora do app
+            lstEntries.ItemDrag += LstEntries_ItemDrag;
+            tvFolders.ItemDrag += TvFolders_ItemDrag;
 
         }
 
@@ -310,7 +313,7 @@ namespace PangYa_Suite_Tools
 
                 // Atualiza as Labels de informação do Header
                 lblAuthor.Text = $"Autor: {_currentReader.Header.Author}";
-                lblVersion.Text = $"Versão: 0x{_currentReader.Header.Version:X2}";
+                lblVersion.Text = $"Versão: {_currentReader.Header.Version}";
                 lblEntries.Text = $"Entradas: {_currentReader.Header.NumFileEntry}";
 
                 txtSearch.Text = "";
@@ -453,8 +456,8 @@ namespace PangYa_Suite_Tools
 
                 var item = new ListViewItem(displayName); // Exibe apenas "data.iff"
                 item.SubItems.Add(entry.Type.ToString());
-                item.SubItems.Add($"0x{entry.Size:X8}");
-                item.SubItems.Add($"0x{entry.CompressSize:X8}");
+                item.SubItems.Add($"{entry.Size}");
+                item.SubItems.Add($"{entry.CompressSize}");
 
                 item.Tag = entry; // O Tag continua guardando o objeto completo intacto (com o Name original do PAK)
                 if (entry.Type == PakFileEntryType.Directory)
@@ -919,7 +922,7 @@ namespace PangYa_Suite_Tools
                 {
                     PakManager.InjectFiles(pakPath, reader, items, options,
                         log: msg => { },
-                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")));
+                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")), SaveBck: ckSecurityPak.Checked);
                 });
 
                 lblStatus.Text = GetText("PAK updated successfully!", "PAK atualizado com sucesso!");
@@ -939,6 +942,150 @@ namespace PangYa_Suite_Tools
                 btnUpdatePak.Enabled = true;
             }
         }
+
+        /// <summary>
+/// Evento disparado ao clicar e arrastar itens da ListView (Arquivos Individuais)
+/// </summary>
+private async void LstEntries_ItemDrag(object? sender, ItemDragEventArgs e)
+{
+    if (_currentReader == null || lstEntries.SelectedItems.Count == 0) return;
+
+    // Filtra as entradas válidas que estão selecionadas
+    var selectedEntries = lstEntries.SelectedItems
+        .Cast<ListViewItem>()
+        .Select(i => (PakFileEntry)i.Tag)
+        .Where(en => en.Type != PakFileEntryType.Directory)
+        .ToList();
+
+    if (selectedEntries.Count == 0) return;
+
+    // Pasta temporária para onde faremos a extração rápida antes de entregar ao Windows Explorer
+    string tempSessionDir = Path.Combine(Path.GetTempPath(), "PangYaSuiteTools_DragDrop", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(tempSessionDir);
+
+    List<string> filesToDrop = new();
+
+    // Extrai rapidamente em background
+    lblStatus.Text = "Preparando arquivos para arrastar...";
+    await Task.Run(() =>
+    {
+        foreach (var entry in selectedEntries)
+        {
+            // Salva na pasta temporária mantendo apenas o nome do arquivo
+            string suggestedName = Path.GetFileName(entry.Name.Replace('/', '\\'));
+            string outPath = Path.Combine(tempSessionDir, suggestedName);
+
+            _currentReader.ExtractEntry(entry, outPath);
+            filesToDrop.Add(outPath);
+        }
+    });
+    lblStatus.Text = "Pronto";
+
+    // Executa a operação nativa do Windows de arrastar e soltar arquivos físicos
+    var dataObject = new DataObject(DataFormats.FileDrop, filesToDrop.ToArray());
+    DoDragDrop(dataObject, DragDropEffects.Copy);
+}
+
+/// <summary>
+/// Evento disparado ao clicar e arrastar uma pasta inteira da TreeView
+/// </summary>
+private async void TvFolders_ItemDrag(object? sender, ItemDragEventArgs e)
+{
+    if (_currentReader == null || tvFolders.SelectedNode == null) return;
+
+    string rawPath = tvFolders.SelectedNode.FullPath;
+
+    // Limpa os emojis e padroniza as barras
+    string cleanPath = rawPath
+        .Replace("🗂 ", "").Replace("🗂", "")
+        .Replace("📁 ", "").Replace("📁", "")
+        .Replace('\\', '/');
+
+    if (cleanPath.StartsWith("Todos os Arquivos/", StringComparison.OrdinalIgnoreCase))
+    {
+        cleanPath = cleanPath.Substring("Todos os Arquivos/".Length);
+    }
+    else if (cleanPath.Equals("Todos os Arquivos", StringComparison.OrdinalIgnoreCase))
+    {
+        cleanPath = "";
+    }
+
+    List<PakFileEntry> entriesToExtract;
+    string rootToStrip = "";
+
+    if (string.IsNullOrWhiteSpace(cleanPath))
+    {
+        entriesToExtract = _currentReader.Entries.Where(en => en.Type != PakFileEntryType.Directory).ToList();
+    }
+    else
+    {
+        string prefix = cleanPath.Trim('/') + "/";
+        int lastSlash = cleanPath.LastIndexOf('/');
+        if (lastSlash >= 0)
+        {
+            rootToStrip = cleanPath.Substring(0, lastSlash + 1);
+        }
+
+        entriesToExtract = _currentReader.Entries
+            .Where(en => en.Type != PakFileEntryType.Directory &&
+                         en.Name.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    if (entriesToExtract.Count == 0) return;
+
+    string tempSessionDir = Path.Combine(Path.GetTempPath(), "PangYaSuiteTools_DragDrop", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(tempSessionDir);
+
+    List<string> directoriesToDrop = new();
+
+    lblStatus.Text = "Preparando estrutura de pasta para arrastar...";
+    await Task.Run(() =>
+    {
+        foreach (var entry in entriesToExtract)
+        {
+            string relativePath = entry.Name.Replace('\\', '/');
+
+            // Corta a árvore de diretórios pai baseando-se no nó selecionado
+            if (!string.IsNullOrEmpty(rootToStrip) && relativePath.StartsWith(rootToStrip, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = relativePath.Substring(rootToStrip.Length);
+            }
+
+            string localRelativePath = relativePath.Replace('/', '\\');
+            string outPath = Path.Combine(tempSessionDir, localRelativePath);
+
+            string? fileDir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(fileDir) && !Directory.Exists(fileDir))
+            {
+                Directory.CreateDirectory(fileDir);
+            }
+
+            _currentReader.ExtractEntry(entry, outPath);
+        }
+
+        // Adiciona a pasta raiz criada na lista para que o Windows copie a estrutura inteira
+        string firstLevelDir = Path.Combine(tempSessionDir, tvFolders.SelectedNode.Text.Replace("📁 ", ""));
+        if (Directory.Exists(firstLevelDir))
+        {
+            directoriesToDrop.Add(firstLevelDir);
+        }
+        else
+        {
+            // Se for a raiz "Todos os Arquivos", pega o diretório temporário completo
+            directoriesToDrop.AddRange(Directory.GetDirectories(tempSessionDir));
+            directoriesToDrop.AddRange(Directory.GetFiles(tempSessionDir));
+        }
+    });
+    lblStatus.Text = "Pronto";
+
+    // Executa a operação nativa entregando a árvore montada para o Windows
+    if (directoriesToDrop.Count > 0)
+    {
+        var dataObject = new DataObject(DataFormats.FileDrop, directoriesToDrop.ToArray());
+        DoDragDrop(dataObject, DragDropEffects.Copy);
+    }
+}
 
         private void LstEntries_DragEnter(object? sender, DragEventArgs e)
         {
@@ -1088,7 +1235,7 @@ namespace PangYa_Suite_Tools
                 {
                     PakManager.RemoveFiles(pakPath, reader, namesToRemove, options,
                         log: msg => { },
-                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")));
+                        onProgress: (done, total) => ReportProgress(done, total, GetText("Rebuilding PAK", "Reconstruindo PAK")), ckSecurityPak.Checked);
                 });
 
                 lblStatus.Text = GetText("Removal completed", "Remoção concluída");
@@ -1228,7 +1375,7 @@ namespace PangYa_Suite_Tools
                 {
                     PakManager.ChangeEncryptionKey(pakPath, reader, newOptions,
                         log: msg => { },
-                        onProgress: (done, total) => ReportProgress(done, total, "Reconstruindo PAK"));
+                        onProgress: (done, total) => ReportProgress(done, total, "Reconstruindo PAK"), ckSecurityPak.Checked);
                 });
 
                 lblStatus.Text = "Chave trocada com sucesso!";

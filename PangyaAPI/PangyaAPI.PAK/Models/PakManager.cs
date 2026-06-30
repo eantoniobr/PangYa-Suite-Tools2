@@ -83,7 +83,7 @@ namespace PangyaAPI.PAK.Models
         /// </summary>
         public static void InjectFiles(string pakPath, PakReader reader, IEnumerable<PakInjectItem> items,
                                         PakRebuildOptions options, string defaultRelativeFolder = "",
-                                        Action<string>? log = null, Action<int, int>? onProgress = null)
+                                        Action<string>? log = null, Action<int, int>? onProgress = null, bool SaveBck = false)
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "PakTemp_" + Path.GetRandomFileName());
             Directory.CreateDirectory(tempDir);
@@ -123,7 +123,7 @@ namespace PangyaAPI.PAK.Models
                 }
 
                 reader.Dispose();
-                RebuildFromTemp(pakPath, tempDir, options, log);
+                RebuildFromTemp(pakPath, tempDir, options, log, SaveBck);
             }
             finally
             {
@@ -145,7 +145,7 @@ namespace PangyaAPI.PAK.Models
         /// regiões/versões do cliente que usam chaves XTEA diferentes.
         /// </summary>
         public static void ChangeEncryptionKey(string pakPath, PakReader reader, PakRebuildOptions newOptions,
-                                                Action<string>? log = null, Action<int, int>? onProgress = null)
+                                                Action<string>? log = null, Action<int, int>? onProgress = null, bool SaveBck = false)
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "PakTemp_" + Path.GetRandomFileName());
             Directory.CreateDirectory(tempDir);
@@ -160,7 +160,7 @@ namespace PangyaAPI.PAK.Models
                 // Fecha o handle do .pak original antes do File.Move dentro de RebuildFromTemp.
                 reader.Dispose();
 
-                RebuildFromTemp(pakPath, tempDir, newOptions, log);
+                RebuildFromTemp(pakPath, tempDir, newOptions, log, SaveBck);
             }
             finally
             {
@@ -174,7 +174,7 @@ namespace PangyaAPI.PAK.Models
         /// </summary>
         public static void RemoveFiles(string pakPath, PakReader reader, IEnumerable<string> namesToRemove,
                                         PakRebuildOptions options, Action<string>? log = null,
-                                        Action<int, int>? onProgress = null)
+                                        Action<int, int>? onProgress = null, bool SaveBck = false)
         {
             var removeSet = new HashSet<string>(
                 namesToRemove.Select(n => n.Replace('/', '\\')),
@@ -196,7 +196,7 @@ namespace PangyaAPI.PAK.Models
                 // Fecha o handle do .pak original antes do File.Move dentro de RebuildFromTemp.
                 reader.Dispose();
 
-                RebuildFromTemp(pakPath, tempDir, options, log);
+                RebuildFromTemp(pakPath, tempDir, options, log, SaveBck);
             }
             finally
             {
@@ -204,11 +204,15 @@ namespace PangyaAPI.PAK.Models
             }
         }
 
-        private static void RebuildFromTemp(string pakPath, string tempDir, PakRebuildOptions options, Action<string>? log)
+        private static void RebuildFromTemp(string pakPath, string tempDir, PakRebuildOptions options, Action<string>? log, bool SaveBck)
         {
-            string backupPak = pakPath + ".bak";
-            if (File.Exists(backupPak)) File.Delete(backupPak);
-            File.Move(pakPath, backupPak);
+            if (SaveBck)
+            {
+                string backupPak = pakPath + ".bak";
+                if (File.Exists(backupPak)) File.Delete(backupPak);
+                File.Move(pakPath, backupPak);
+            }
+           
 
             try
             {
@@ -221,13 +225,17 @@ namespace PangyaAPI.PAK.Models
                     Author = options.Author,
                 };
 
-                writer.CreateFromDirectoryContents(tempDir, pakPath, log);
+                writer.CreateFromDirectoryContents(tempDir, pakPath, log); 
             }
             catch
             {
-                // Falhou ao reconstruir: restaura o backup para não perder o PAK original.
-                if (File.Exists(pakPath)) File.Delete(pakPath);
-                File.Move(backupPak, pakPath);
+                if (SaveBck)
+                {
+                    string backupPak = pakPath + ".bak";
+                    // Falhou ao reconstruir: restaura o backup para não perder o PAK original.
+                    if (File.Exists(pakPath)) File.Delete(pakPath);
+                    File.Move(backupPak, pakPath);
+                }
                 throw;
             }
         }

@@ -13,24 +13,14 @@ namespace PangyaAPI.PAK.Models
         //SS DEV
         public static readonly uint[] SS = { 0x087A0F82u, 0x1880DD08u, 0x85FA69CBu, 0xFF5808EAu };
         public static readonly IReadOnlyList<(string Label, uint[] Keys)> All = new[]
-        {
-        ("Global",      GB),
-        ("Tailandês",    TH),
-        ("Japonês",     JP),
-        ("Coreano",     KR),
-        ("Indonesiano", ID),
-        ("Europeu",     EU),  
-        ("Super SS Dev", SS) 
-        };
-
-        public static List<string> GetNameKeys()
-        {
-            var list = new List<string>();
-            foreach (var item in All)
-            {
-                list.Add(item.Label);
-            }
-            return list;
-        }
+        { ("Global",      GB),
+        ("Thailand",    TH),
+        ("Japan",     JP),
+        ("Korea",     KR),
+        ("Indonesian", ID),
+        ("European",     EU),  
+        ("Super SS Dev", SS) //acabei desistindo:
+            //de inicio eu conseguir, eu comecei fazendo, olhando bit por bit, mas descobrir outras coisas, preferir focar em entender, o conceito.
+        }; 
     }
 }

@@ -1,17 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
-  <!-- 
-    Microsoft ResX Schema 
-    
+  <!--
+    Microsoft ResX Schema
+
     Version 2.0
-    
-    The primary goals of this format is to allow a simple XML format 
-    that is mostly human readable. The generation and parsing of the 
-    various data types are done through the TypeConverter classes 
+
+    The primary goals of this format is to allow a simple XML format
+    that is mostly human readable. The generation and parsing of the
+    various data types are done through the TypeConverter classes
     associated with the data types.
-    
+
     Example:
-    
+
     ... ado.net/XML headers & schema ...
     <resheader name="resmimetype">text/microsoft-resx</resheader>
     <resheader name="version">2.0</resheader>
@@ -26,36 +26,36 @@
         <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
         <comment>This is a comment</comment>
     </data>
-                
-    There are any number of "resheader" rows that contain simple 
+
+    There are any number of "resheader" rows that contain simple
     name/value pairs.
-    
-    Each data row contains a name, and value. The row also contains a 
-    type or mimetype. Type corresponds to a .NET class that support 
-    text/value conversion through the TypeConverter architecture. 
-    Classes that don't support this are serialized and stored with the 
+
+    Each data row contains a name, and value. The row also contains a
+    type or mimetype. Type corresponds to a .NET class that support
+    text/value conversion through the TypeConverter architecture.
+    Classes that don't support this are serialized and stored with the
     mimetype set.
-    
-    The mimetype is used for serialized objects, and tells the 
-    ResXResourceReader how to depersist the object. This is currently not 
+
+    The mimetype is used for serialized objects, and tells the
+    ResXResourceReader how to depersist the object. This is currently not
     extensible. For a given mimetype the value must be set accordingly:
-    
-    Note - application/x-microsoft.net.object.binary.base64 is the format 
-    that the ResXResourceWriter will generate, however the reader can 
+
+    Note - application/x-microsoft.net.object.binary.base64 is the format
+    that the ResXResourceWriter will generate, however the reader can
     read any of the formats listed below.
-    
+
     mimetype: application/x-microsoft.net.object.binary.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
             : and then encoded with base64 encoding.
-    
+
     mimetype: application/x-microsoft.net.object.soap.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
             : and then encoded with base64 encoding.
 
     mimetype: application/x-microsoft.net.object.bytearray.base64
-    value   : The object must be serialized into a byte array 
+    value   : The object must be serialized into a byte array
             : using a System.ComponentModel.TypeConverter
             : and then encoded with base64 encoding.
     -->
@@ -117,21 +117,33 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <assembly alias="System.Drawing" name="System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
-  <data name="statusStrip1.TrayLocation" type="System.Drawing.Point, System.Drawing">
+  <metadata name="statusStrip1.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>17, 17</value>
-  </data>
+  </metadata>
   <data name="FrmPakMaker_br" xml:space="preserve">
-    <value>Manipulador de PAK - Interface</value>
+    <value>PakManager - Interface do Desenvolvedor</value>
   </data>
   <data name="FrmPakMaker_en" xml:space="preserve">
-    <value>PakManager - Interface</value>
+    <value>PakManager - Developer Interface</value>
   </data>
+  <data name="lblLanguage_br" xml:space="preserve">
+    <value>Idioma:</value>
+  </data>
+  <data name="lblLanguage_en" xml:space="preserve">
+    <value>Language:</value>
+  </data>
+  <data name="lblStatus_br" xml:space="preserve">
+    <value>Pronto</value>
+  </data>
+  <data name="lblStatus_en" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+
   <data name="tabExtract_br" xml:space="preserve">
-    <value>Carregar &amp; Modificar</value>
+    <value>Leitor &amp; Modificações</value>
   </data>
   <data name="tabExtract_en" xml:space="preserve">
-    <value>Load &amp; Modifications</value>
+    <value>Reader &amp; Modifications</value>
   </data>
   <data name="btnBrowsePak_br" xml:space="preserve">
     <value>Buscar...</value>
@@ -145,6 +157,7 @@
   <data name="txtPakPathHint_en" xml:space="preserve">
     <value>Drag a .pak file here or click Browse...</value>
   </data>
+
   <data name="groupHeader_br" xml:space="preserve">
     <value>Informações do Cabeçalho</value>
   </data>
@@ -169,6 +182,7 @@
   <data name="lblEntries_en" xml:space="preserve">
     <value>Entries: ---</value>
   </data>
+
   <data name="lblSearch_br" xml:space="preserve">
     <value>🔎 Pesquisar:</value>
   </data>
@@ -187,6 +201,7 @@
   <data name="lblCurrentPath_en" xml:space="preserve">
     <value>📂 Path: (all files)</value>
   </data>
+
   <data name="btnExtractSelected_br" xml:space="preserve">
     <value>📤 EXTRAIR SELECIONADO(S)</value>
   </data>
@@ -203,13 +218,13 @@
     <value>📂 EXTRAIR PASTA (LOTE)</value>
   </data>
   <data name="btnBatchExtract_en" xml:space="preserve">
-    <value>📂 BATCH EXTRACT</value>
+    <value>📂 BATCH EXTRACT FOLDER</value>
   </data>
   <data name="btnUpdatePak_br" xml:space="preserve">
-    <value>🔄 ATUALIZAR</value>
+    <value>🔄 INJETAR / ATUALIZAR</value>
   </data>
   <data name="btnUpdatePak_en" xml:space="preserve">
-    <value>🔄 UPDATE</value>
+    <value>🔄 INJECT / UPDATE</value>
   </data>
   <data name="btnExtractAll_br" xml:space="preserve">
     <value>💥 EXTRAIR TUDO</value>
@@ -217,6 +232,7 @@
   <data name="btnExtractAll_en" xml:space="preserve">
     <value>💥 EXTRACT ALL</value>
   </data>
+
   <data name="colName_br" xml:space="preserve">
     <value>Nome do Arquivo</value>
   </data>
@@ -233,15 +249,15 @@
     <value>Tamanho Real</value>
   </data>
   <data name="colSize_en" xml:space="preserve">
-    <value>Real Size</value>
+    <value>Original Size</value>
   </data>
   <data name="colCompSize_br" xml:space="preserve">
     <value>Tam. Compactado</value>
-    <comment>usando 0x</comment>
   </data>
   <data name="colCompSize_en" xml:space="preserve">
     <value>Compressed Size</value>
   </data>
+
   <data name="lblNewKey_br" xml:space="preserve">
     <value>🔑 Nova Chave (XTEA):</value>
   </data>
@@ -252,13 +268,14 @@
     <value>🔐 TROCAR CHAVE DO PAK</value>
   </data>
   <data name="btnChangeKey_en" xml:space="preserve">
-    <value>🔐 UPDATE KEY PAK</value>
+    <value>🔐 CHANGE PAK CIPHER KEY</value>
   </data>
+
   <data name="tabCreate_br" xml:space="preserve">
     <value>Criar Novo PAK</value>
   </data>
   <data name="tabCreate_en" xml:space="preserve">
-    <value>Make New PAK</value>
+    <value>Create New PAK</value>
   </data>
   <data name="txtSourceFolderHint_br" xml:space="preserve">
     <value>Arraste uma pasta aqui...</value>
@@ -301,17 +318,5 @@
   </data>
   <data name="btnCreatePak_en" xml:space="preserve">
     <value>📦 GENERATE .PAK FILE</value>
-  </data>
-  <data name="lblStatus_br" xml:space="preserve">
-    <value>Pronto</value>
-  </data>
-  <data name="lblStatus_en" xml:space="preserve">
-    <value>Ready</value>
-  </data>
-  <data name="lblLanguage_br" xml:space="preserve">
-    <value>Idioma:</value>
-  </data>
-  <data name="lblLanguage_en" xml:space="preserve">
-    <value>Language:</value>
   </data>
 </root>

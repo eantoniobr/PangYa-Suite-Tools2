@@ -109,6 +109,7 @@
             progressBar1 = new ToolStripProgressBar();
             lblLanguage = new ToolStripStatusLabel();
             cboLanguage = new ToolStripComboBox();
+            ckSecurityPak = new CheckBox();
             tabControl1.SuspendLayout();
             tabExtract.SuspendLayout();
             groupHeader.SuspendLayout();
@@ -353,7 +354,7 @@
             // 
             // lblNewKey
             // 
-            lblNewKey.Location = new Point(11, 368);
+            lblNewKey.Location = new Point(5, 368);
             lblNewKey.Name = "lblNewKey";
             lblNewKey.Size = new Size(130, 17);
             lblNewKey.TabIndex = 13;
@@ -543,11 +544,24 @@
             cboLanguage.Size = new Size(120, 23);
             cboLanguage.SelectedIndexChanged += cboLanguage_SelectedIndexChanged;
             // 
+            // ckSecurityPak
+            // 
+            ckSecurityPak.AutoSize = true;
+            ckSecurityPak.Checked = true;
+            ckSecurityPak.CheckState = CheckState.Checked;
+            ckSecurityPak.Location = new Point(13, 464);
+            ckSecurityPak.Name = "ckSecurityPak";
+            ckSecurityPak.Size = new Size(90, 19);
+            ckSecurityPak.TabIndex = 2;
+            ckSecurityPak.Text = "Security Pak";
+            ckSecurityPak.UseVisualStyleBackColor = true;
+            // 
             // FrmPakMaker
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(774, 487);
+            Controls.Add(ckSecurityPak);
             Controls.Add(tabControl1);
             Controls.Add(statusStrip1);
             FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -568,5 +582,7 @@
             ResumeLayout(false);
             PerformLayout();
         }
+
+        private CheckBox ckSecurityPak;
     }
 }

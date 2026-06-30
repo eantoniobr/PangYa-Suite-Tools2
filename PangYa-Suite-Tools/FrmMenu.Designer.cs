@@ -20,6 +20,8 @@
             btnOpenUpdateList = new Button();
             btnOpenIffManager = new Button();
             lblTitle = new Label();
+            cbLanguage = new ComboBox();
+            label1 = new Label();
             SuspendLayout();
             // 
             // btnOpenPakMaker
@@ -65,11 +67,31 @@
             lblTitle.Text = "Pangya Studio Suite - Developer Tool";
             lblTitle.TextAlign = ContentAlignment.MiddleCenter;
             // 
+            // cbLanguage
+            // 
+            cbLanguage.FormattingEnabled = true;
+            cbLanguage.Items.AddRange(new object[] { "Portugues", "English" });
+            cbLanguage.Location = new Point(131, 282);
+            cbLanguage.Name = "cbLanguage";
+            cbLanguage.Size = new Size(121, 23);
+            cbLanguage.TabIndex = 4;
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(84, 286);
+            label1.Name = "label1";
+            label1.Size = new Size(47, 15);
+            label1.TabIndex = 5;
+            label1.Text = "Idioma:";
+            // 
             // FrmMenu
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(384, 275);
+            ClientSize = new Size(384, 332);
+            Controls.Add(label1);
+            Controls.Add(cbLanguage);
             Controls.Add(btnOpenIffManager);
             Controls.Add(btnOpenUpdateList);
             Controls.Add(btnOpenPakMaker);
@@ -80,6 +102,10 @@
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Pangya Studio - Menu Principal";
             ResumeLayout(false);
+            PerformLayout();
         }
+
+        private ComboBox cbLanguage;
+        private Label label1;
     }
 }
