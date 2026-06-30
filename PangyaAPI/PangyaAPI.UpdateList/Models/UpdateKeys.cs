@@ -1,5 +1,5 @@
 ﻿//criado por LUISMK -> github.com/luismk
-//chaves do upadte e pak, estao interligadas.
+//chaves do upadate e pak, estao interligadas.
 namespace PangyaAPI.UpdateList.Models
 {
     public static class UpdateKeys
@@ -10,15 +10,14 @@ namespace PangyaAPI.UpdateList.Models
         public static readonly uint[] JP = { 0x020A5FD4u, 0x01EEBDFFu, 0x02B3C6A0u, 0x04F6A3E1u };
         public static readonly uint[] KR = { 0x0485B576u, 0x05148E02u, 0x05141D96u, 0x028FA9D6u };
         public static readonly uint[] ID = { 0x01640DB7u, 0x01455A9Bu, 0x027F1AB7u, 0x05918B54u };
-        public static readonly uint[] EU = { 0x01E986D8u, 0x05818479u, 0x03D2B0BBu, 0x02C9B030u }; 
+        public static readonly uint[] EU = { 0x01E986D8u, 0x05818479u, 0x03D2B0BBu, 0x02C9B030u };
         public static readonly IReadOnlyList<(string Label, uint[] Keys)> All = new[]
-        {
-        ("Global",      GB),
-        ("Tailandês",    TH),
-        ("Japonês",     JP),
-        ("Coreano",     KR),
-        ("Indonesiano", ID),
-        ("Europeu",     EU)
+        { ("Global",      GB),
+        ("Thailand",    TH),
+        ("Japan",     JP),
+        ("Korea",     KR),
+        ("Indonesian", ID),
+        ("European",     EU)
         };
 
         public static List<string> GetNameKeys()

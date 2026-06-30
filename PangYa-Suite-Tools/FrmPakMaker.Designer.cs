@@ -268,7 +268,7 @@
             btnBatchExtract.Name = "btnBatchExtract";
             btnBatchExtract.Size = new Size(175, 28);
             btnBatchExtract.TabIndex = 9;
-            btnBatchExtract.Text = "📂 EXTRAIR PASTA (LOTE)";
+            btnBatchExtract.Text = "📂 EXTRAIR PASTA";
             btnBatchExtract.UseVisualStyleBackColor = false;
             btnBatchExtract.Click += btnBatchExtract_Click;
             // 

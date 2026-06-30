@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 namespace PangyaAPI.Utilities.Cryptography
@@ -100,6 +100,10 @@ namespace PangyaAPI.Utilities.Cryptography
             int dIdx = 0, sIdx = 0;
             int[] maskPtrPositions = new int[8]; // posições das ushorts de cada bit
 
+            // Índice local por chamada (thread-safe entre arquivos paralelos), igual ao
+            // usado pelo Lz77 — troca a busca de força bruta O(janela) por O(candidatos).
+            var hashChain = new Dictionary<int, List<int>>();
+
             while (sIdx < size)
             {
                 if (dIdx >= dest.Length) return null;
@@ -112,10 +116,11 @@ namespace PangyaAPI.Utilities.Cryptography
                 {
                     if (dIdx >= dest.Length) return null;
 
-                    var (matchLen, matchPos) = Lz77.FindBestMatchInternal(source, sIdx, maxDicWindow, maxMatch);
+                    var (matchLen, matchPos) = Lz77.FindBestMatchInternal(source, sIdx, maxDicWindow, maxMatch, hashChain);
 
                     if (matchPos < 0)
                     {
+                        Lz77.IndexPositionInternal(hashChain, source, sIdx, size);
                         dest[dIdx++] = source[sIdx++];
                     }
                     else
@@ -129,6 +134,12 @@ namespace PangyaAPI.Utilities.Cryptography
                         maskPtrPositions[bits] = dIdx;
 
                         dIdx += 2;
+
+                        // Indexa TODAS as posições consumidas pelo match, não só a primeira —
+                        // senão o índice fica incompleto e perde futuras oportunidades de match.
+                        for (int p = sIdx; p < sIdx + matchLen; p++)
+                            Lz77.IndexPositionInternal(hashChain, source, p, size);
+
                         sIdx += matchLen;
 
                         dest[maskPos] |= (byte)((1 << bits) & 0xFF);
@@ -157,6 +168,7 @@ namespace PangyaAPI.Utilities.Cryptography
             Array.Resize(ref dest, dIdx);
             return dest;
         }
+
     }
 
 }

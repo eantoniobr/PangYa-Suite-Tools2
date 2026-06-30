@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -76,6 +76,12 @@ namespace PangyaAPI.Utilities.Cryptography
 
             int dIdx = 0, sIdx = 0;
 
+            // Índice local por chamada (thread-safe entre arquivos paralelos): mapeia
+            // hash de 3 bytes -> lista de posições onde já apareceu, mais recente primeiro.
+            // Isso troca a busca de força bruta O(janela) por O(candidatos), evitando
+            // varrer até 4095 posições byte a byte para cada posição do arquivo.
+            var hashChain = new Dictionary<int, List<int>>();
+
             while (sIdx < size)
             {
                 if (dIdx >= dest.Length) return null;
@@ -87,10 +93,11 @@ namespace PangyaAPI.Utilities.Cryptography
                 {
                     if (dIdx >= dest.Length) return null;
 
-                    var (matchLen, matchPos) = FindBestMatch(source, sIdx, maxDicWindow, maxMatch);
+                    var (matchLen, matchPos) = FindBestMatch(source, sIdx, maxDicWindow, maxMatch, hashChain);
 
                     if (matchPos < 0)
                     {
+                        IndexPosition(hashChain, source, sIdx, size);
                         dest[dIdx++] = source[sIdx++];
                     }
                     else
@@ -101,6 +108,12 @@ namespace PangyaAPI.Utilities.Cryptography
                         dest[dIdx] = (byte)(head & 0xFF);
                         dest[dIdx + 1] = (byte)(head >> 8);
                         dIdx += 2;
+
+                        // Indexa TODAS as posições consumidas pelo match, não só a primeira —
+                        // senão o índice fica incompleto e perde futuras oportunidades de match.
+                        for (int p = sIdx; p < sIdx + matchLen; p++)
+                            IndexPosition(hashChain, source, p, size);
+
                         sIdx += matchLen;
 
                         dest[maskPos] |= (byte)((1 << bits) & 0xFF);
@@ -114,8 +127,37 @@ namespace PangyaAPI.Utilities.Cryptography
             return dest;
         }
 
+        private const int MaxCandidatesToCheck = 32;
+        private const int MaxChainLength = 64;
+
+        private static int HashKey(byte[] src, int pos)
+        {
+            // Hash simples de 3 bytes — suficiente para boa dispersão sem custo relevante.
+            return (src[pos] << 16) | (src[pos + 1] << 8) | src[pos + 2];
+        }
+
+        private static void IndexPosition(Dictionary<int, List<int>> hashChain, byte[] src, int pos, int size)
+        {
+            if (pos + 3 > size) return;
+
+            int key = HashKey(src, pos);
+            if (!hashChain.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                hashChain[key] = list;
+            }
+
+            list.Insert(0, pos); // mantém ordem decrescente (mais recente primeiro)
+
+            // Evita listas crescerem sem limite em arquivos com muita repetição
+            // (ex.: texturas sólidas, áreas com bytes repetidos).
+            if (list.Count > MaxChainLength)
+                list.RemoveAt(list.Count - 1);
+        }
+
         private static (int matchLen, int matchPos) FindBestMatch(byte[] src, int sIdx,
-                                                                   ushort maxDicWindow, ushort maxMatch)
+                                                                   ushort maxDicWindow, ushort maxMatch,
+                                                                   Dictionary<int, List<int>> hashChain)
         {
             if (sIdx <= 2 || (sIdx + 3) > src.Length)
                 return (0, -1);
@@ -123,10 +165,18 @@ namespace PangyaAPI.Utilities.Cryptography
             int dicStart = sIdx - Math.Min(sIdx, maxDicWindow);
             int bestLen = 0;
             int bestPos = -1;
-            int dicWindow = dicStart;
 
-            while (dicWindow < (sIdx - 3))
+            int key = HashKey(src, sIdx);
+            if (!hashChain.TryGetValue(key, out var candidates))
+                return (0, -1);
+
+            int checkedCount = 0;
+
+            foreach (int dicWindow in candidates)
             {
+                if (dicWindow < dicStart) break; // lista ordenada decrescente: o resto está fora da janela
+                if (++checkedCount > MaxCandidatesToCheck) break;
+
                 int ts = sIdx;
                 int dw2 = dicWindow;
 
@@ -135,27 +185,31 @@ namespace PangyaAPI.Utilities.Cryptography
 
                 int len = ts - sIdx;
 
-                if (len > 2 && len >= bestLen)
+                if (len > bestLen)
                 {
                     bestLen = len;
                     bestPos = dw2 - len;
-
-                    if (bestLen == maxMatch || ts == src.Length || dw2 == sIdx)
-                        break;
+                    if (bestLen == maxMatch) break;
                 }
-
-                dicWindow = (dw2 - len) + 1;
             }
 
             return bestLen > 2 ? (bestLen, bestPos) : (0, -1);
         }
     }
-     
+
     public static partial class Lz77
     {
+        /// <summary>
+        /// Exposto para uso pelo Lz772, que reimplementa seu próprio loop de compressão
+        /// (precisa ofuscar máscara/pares) mas reaproveita a mesma busca de match indexada.
+        /// </summary>
         internal static (int matchLen, int matchPos) FindBestMatchInternal(byte[] src, int sIdx,
-                                                                            ushort maxDicWindow, ushort maxMatch)
-            => FindBestMatch(src, sIdx, maxDicWindow, maxMatch);
+                                                                            ushort maxDicWindow, ushort maxMatch,
+                                                                            Dictionary<int, List<int>> hashChain)
+            => FindBestMatch(src, sIdx, maxDicWindow, maxMatch, hashChain);
+
+        internal static void IndexPositionInternal(Dictionary<int, List<int>> hashChain, byte[] src, int pos, int size)
+            => IndexPosition(hashChain, src, pos, size);
     }
 
 }

@@ -10,13 +10,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="IFFEditor\**" />
+    <EmbeddedResource Remove="IFFEditor\**" />
+    <None Remove="IFFEditor\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PangyaAPI\PangyaAPI.PAK\PangyaAPI.PAK.csproj" />
     <ProjectReference Include="..\PangyaAPI\PangyaAPI.UpdateList\PangyaAPI.UpdateList.csproj" />
     <ProjectReference Include="..\PangyaAPI\PangyaAPI.Utilities\PangyaAPI.Utilities.csproj" />
    </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="IFFEditor\" />
+    <PackageReference Include="FluentFTP" Version="54.2.0" />
   </ItemGroup>
 
 </Project>

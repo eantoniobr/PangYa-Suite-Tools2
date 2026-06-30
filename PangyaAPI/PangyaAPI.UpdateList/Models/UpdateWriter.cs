@@ -1,5 +1,6 @@
-﻿using PangyaAPI.Utilities.Cryptography;
+using PangyaAPI.Utilities.Cryptography;
 using System.Text;
+using System.Xml;
 
 namespace PangyaAPI.UpdateList.Models
 {
@@ -20,38 +21,30 @@ namespace PangyaAPI.UpdateList.Models
                 return;
             }
 
-            // Define o arquivo XML temporário na mesma pasta do destino final
             string directory = Path.GetDirectoryName(outputPath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string tempXmlPath = Path.Combine(directory, "updatelist_temp.xml");
 
-            // Garante o registro do provider euc-kr se estiver no .NET moderno
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
             using (StreamWriter streamWriter = new StreamWriter(tempXmlPath, append: false, Encoding.GetEncoding("euc-kr")))
             {
                 streamWriter.WriteLine("<?xml version=\"1.0\" encoding=\"euc-kr\" standalone=\"yes\" ?>");
-                streamWriter.WriteLine("<patchVer value=\"" + header.ClientPatchVersion + "\" />");
-                streamWriter.WriteLine("<patchNum value=\"" + header.ClientPatchNum + "\" />");
-                streamWriter.WriteLine("<updatelistVer value=\"" + header.UpdateVersion + "\" />");
+                streamWriter.WriteLine("<patchVer value=\"" + XmlEscape(header.ClientPatchVersion) + "\" />");
+                streamWriter.WriteLine("<patchNum value=\"" + XmlEscape(header.ClientPatchNum) + "\" />");
+                streamWriter.WriteLine("<updatelistVer value=\"" + XmlEscape(header.UpdateVersion) + "\" />");
                 streamWriter.WriteLine($"<updatefiles count=\"{entries.Count}\">");
 
-                foreach (var xmlFile in entries)
+                foreach (var entry in entries)
                 {
-                    streamWriter.WriteLine($"\t<fileinfo fname=\"{xmlFile.fname}\" fdir=\"{xmlFile.fdir}\" fsize=\"{xmlFile.fsize}\" fcrc=\"{xmlFile.fcrc}\" fdate=\"{xmlFile.fdate}\" ftime=\"{xmlFile.ftime}\" pname=\"{xmlFile.pname}\" psize=\"{xmlFile.psize}\" />");
+                    streamWriter.WriteLine("\t" + BuildFileInfoElement(entry));
                 }
                 streamWriter.Write("</updatefiles>");
             }
 
-            // 1. Lê os bytes do XML temporário gerado
             byte[] rawXmlBytes = File.ReadAllBytes(tempXmlPath);
-
-            // 2. CORREÇÃO: Criptografa os dados e captura o array de bytes resultante
             byte[] encryptedData = XteaEncrypt(rawXmlBytes);
-
-            // 3. CORREÇÃO: Grava o arquivo final criptografado no caminho de destino (outputPath)
             File.WriteAllBytes(outputPath, encryptedData);
 
-            // Limpa o arquivo XML temporário
             if (File.Exists(tempXmlPath))
             {
                 File.Delete(tempXmlPath);
@@ -59,6 +52,36 @@ namespace PangyaAPI.UpdateList.Models
 
             Console.WriteLine($"UpdateList gerada com sucesso em: {outputPath}");
         }
+
+        /// <summary>
+        /// Monta o elemento &lt;fileinfo .../&gt; iterando sobre UpdateEntryFieldMap.Fields,
+        /// em vez de uma interpolação manual com os 8 nomes de atributo hardcoded — assim
+        /// qualquer campo adicionado ao mapa aparece aqui automaticamente.
+        /// </summary>
+        private static string BuildFileInfoElement(UpdateEntry entry)
+        {
+            var sb = new StringBuilder("<fileinfo");
+            foreach (var field in UpdateEntryFieldMap.Fields)
+            {
+                sb.Append(' ')
+                  .Append(field.XmlAttributeName)
+                  .Append("=\"")
+                  .Append(XmlEscape(field.Get(entry)))
+                  .Append('"');
+            }
+            sb.Append(" />");
+            return sb.ToString();
+        }
+
+        /// <summary>Escapa caracteres especiais de XML em valores de atributo (nomes de arquivo podem conter & " etc.).</summary>
+        private static string XmlEscape(string? value) => SecurityElementEscape(value ?? "");
+
+        private static string SecurityElementEscape(string value) =>
+            value.Replace("&", "&amp;")
+                 .Replace("\"", "&quot;")
+                 .Replace("'", "&apos;")
+                 .Replace("<", "&lt;")
+                 .Replace(">", "&gt;");
 
         public byte[] XteaEncrypt(byte[] rawData)
         {
